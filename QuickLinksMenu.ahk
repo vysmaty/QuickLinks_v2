@@ -13,6 +13,28 @@
 #Requires AutoHotkey v2
 #SingleInstance Force
 
+; TODO: INI FILE with settings
+; Settings are stored at: \settings.ini
+/* ; ini settings v2
+section := IniRead(a_scriptDir "\settings.ini", "settings")
+Loop Parse, section, "`n", "`r"
+{
+    pos := InStr(a_loopField, "=",, (0)+1) - 1
+    ini_key := SubStr(SubStr(a_loopField, 1, pos), -)
+    ini_value := SubStr(a_loopField, pos + 2)
+    %ini_key% := ini_value
+}
+
+;# ini settings v1
+iniRead, section, % a_scriptDir "\settings.ini", settings
+loop, parse, % section, `n, `r
+{
+    stringGetPos, pos, a_loopField, =, L1
+    stringMid, ini_key, a_loopField, pos, , L
+    stringMid, ini_value, a_loopField, pos + 2
+    %ini_key% := ini_value
+}
+ */
 
 ; DEBUG: Dále je kód z Easy Access to Favorite Folders
 ;----
@@ -488,6 +510,7 @@ GetActiveExplorerTab(hwnd := WinExist("A")) {
 	}
 }
 
+; TODO: Duplicate function
 ExpandEnvVars(str)
 {
 	if sz := DllCall("ExpandEnvironmentStrings", "Str", str, "Ptr", 0, "UInt", 0)
