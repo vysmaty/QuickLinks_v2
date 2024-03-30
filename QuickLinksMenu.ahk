@@ -13,28 +13,18 @@
 #Requires AutoHotkey v2
 #SingleInstance Force
 
-; TODO: INI FILE with settings
-; Settings are stored at: \settings.ini
-/* ; ini settings v2
-section := IniRead(a_scriptDir "\settings.ini", "settings")
+; Read setings from \settings.ini
+OutputDebug "Retrived settings:`n"
+section := IniRead(A_ScriptDir "\settings.ini", "settings")
+setting := {} ;Object for properies and items.
 Loop Parse, section, "`n", "`r"
 {
-    pos := InStr(a_loopField, "=",, (0)+1) - 1
-    ini_key := SubStr(SubStr(a_loopField, 1, pos), -)
+    pos := InStr(a_loopField, "=",, 1) - 1
+    ini_key := SubStr(a_loopField, 1, pos)
     ini_value := SubStr(a_loopField, pos + 2)
-    %ini_key% := ini_value
+	setting.%ini_key% := ini_value
+	OutputDebug ini_key "=" setting.%ini_key% "`n"
 }
-
-;# ini settings v1
-iniRead, section, % a_scriptDir "\settings.ini", settings
-loop, parse, % section, `n, `r
-{
-    stringGetPos, pos, a_loopField, =, L1
-    stringMid, ini_key, a_loopField, pos, , L
-    stringMid, ini_value, a_loopField, pos + 2
-    %ini_key% := ini_value
-}
- */
 
 ; DEBUG: Dále je kód z Easy Access to Favorite Folders
 ;----
