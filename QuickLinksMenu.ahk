@@ -178,25 +178,42 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 		IconFile := this.getExtIcon(StrReplace(Extension, "."))
 
-		If InStr(Extension, "\")
-			menuitem.SetIcon(submenu, A_Windir "\syswow64\SHELL32.dll", "5")
-		Else If (Extension = ".ahk")
-			menuitem.SetIcon(submenu, "autohotkey.exe", "2")
-		Else If (Extension ~= "i)\.(jpg|png)")
-			menuitem.SetIcon(submenu, A_Windir "\system32\Imageres.dll", "68")
-		Else If (Extension = ".txt")
-			menuitem.SetIcon(submenu, A_Windir "\syswow64\Notepad.exe", "0")
-		Else If InStr(IconFile, " - ") {
+		; Manualy Set Icons for Selected Extensions
+
+		; TODO: Fix Registry Search and Comment Out Sections
+		; TODO: Add Fallback for non existent files. And Log Error Message.
+		; TODO: Check Folder Icon Set
+
+		/* IconNumber
+		Type: Integer
+		If omitted, it defaults to 1 (the first icon group). Otherwise, specify the number of the icon group to be used in the file. For example, MyMenu.SetIcon(MenuItemName, "Shell32.dll", 2) would use the default icon from the second icon group. If negative, its absolute value is assumed to be the resource ID of an icon within an executable file.
+		*/
+
+		switch (Extension) {
+			case InStr(Extension, "\"):
+				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", 5)
+			case ".url":
+				menuitem.SetIcon(submenu, A_Windir "\system32\Imageres.dll", -1010)
+			case ".ahk":
+				menuitem.SetIcon(submenu, "autohotkey.exe", 2)
+			case ".jpg", ".png":
+				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -236)
+			case ".txt":
+				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -235)
+
+			default:
+				; If icon is specified as "file - index" ; Untested.
+				if (InStr(IconFile, " - ")) {
 			try {
 				RegExMatch(IconFile, "(.*) - (\d*)", &IconFile)
 				menuitem.SetIcon(submenu, IconFile[1], IconFile[2])
 			}
-			Catch {
-				MsgBox(IconFile[1] "`n" IconFile[2] "`next:" Extension)
+					catch {
+						MsgBox(IconFile[1] "`n" IconFile[2] "`nNext: " . Extension)
+					}
 			}
 			return
 		}
-		Return
 	}
 
 	Icon_Folder_Add(menuitem, submenu, FolderPath) { ; add icon for folders
