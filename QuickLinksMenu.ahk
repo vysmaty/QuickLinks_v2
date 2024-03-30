@@ -200,10 +200,12 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		}
 	}
 
+	; to FIXME: unable to read .txt file Why? Improve metod and - try catch -> OutputDebug message.
 	getExtIcon(Ext) {
+		try{
 		from := RegRead("HKEY_CLASSES_ROOT\." Ext)
 		DefaultIcon := RegRead("HKEY_CLASSES_ROOT\" from "\DefaultIcon")
-		; TODO: Use ExpandEnvironmentStrings or ConvertToAbsolutePath
+		; TODO: Use for path env ExpandEnvironmentStrings or ConvertToAbsolutePath
 		DefaultIcon := StrReplace(DefaultIcon, '"')
 		DefaultIcon := StrReplace(DefaultIcon, "%SystemRoot%", A_WinDir)
 		DefaultIcon := StrReplace(DefaultIcon, "%ProgramFiles%", A_ProgramFiles)
@@ -212,6 +214,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		I := StrSplit(DefaultIcon, ",")
 
 		Return I[1] " - " this.IndexOfIconResource(I[1], RegExReplace(I[2], "[^\d]+"))
+	}
 	}
 
 	IndexOfIconResource(Filename, ID) {
