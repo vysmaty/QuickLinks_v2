@@ -322,7 +322,7 @@ OpenFavorite(ItemName, LinkTargetPath, LinkPath, *)
 	{
 		if VerCompare(A_OSVersion, "10.0.22000") >= 0 ; Windows 11 and later
 		{
-			try GetActiveExplorerTab().Navigate(ExpandEnvVars(path))
+			try GetActiveExplorerTab().Navigate(ExpandEnvironmentStrings(&path)) ; TODO: Test after function switch.
 		}
 		else
 		{
@@ -394,25 +394,6 @@ ConvertToAbsolutePath(relativePath, basePath) {
 		return relativePath ; Path is already absolute
 	else
 		return basePath . "\" . relativePath ; ; Convert to absolute
-}
-
-ExpandEnvironmentStrings(&vInputString)
-{
-	; get the required size for the expanded string
-	vSizeNeeded := DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Int", 0, "Int", 0)
-	If (vSizeNeeded == "" || vSizeNeeded <= 0)
-		return False ; unable to get the size for the expanded string for some reason
-
-	vByteSize := vSizeNeeded + 1
-	VarSetStrCapacity(&vTempValue, vByteSize)
-
-	; attempt to expand the environment string
-	If (!DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Str", vTempValue, "Int", vSizeNeeded))
-		return False ; unable to expand the environment string
-	vInputString := vTempValue
-
-	; return success
-	Return True
 }
 
 ; Unused part of Code
@@ -521,8 +502,28 @@ GetActiveExplorerTab(hwnd := WinExist("A")) {
 	}
 }
 
-; TODO: Duplicate function
-ExpandEnvVars(str)
+ExpandEnvironmentStrings(&vInputString)
+{
+	; get the required size for the expanded string
+	vSizeNeeded := DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Int", 0, "Int", 0)
+	If (vSizeNeeded == "" || vSizeNeeded <= 0)
+		return False ; unable to get the size for the expanded string for some reason
+
+	vByteSize := vSizeNeeded + 1
+	VarSetStrCapacity(&vTempValue, vByteSize)
+
+	; attempt to expand the environment string
+	If (!DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Str", vTempValue, "Int", vSizeNeeded))
+		return False ; unable to expand the environment string
+	vInputString := vTempValue
+
+	; return success
+	Return True
+}
+
+/* 
+; TODO: Remove Duplicate function
+ExpandEnvironmentStrings(str)
 {
 	if sz := DllCall("ExpandEnvironmentStrings", "Str", str, "Ptr", 0, "UInt", 0)
 	{
@@ -532,3 +533,4 @@ ExpandEnvVars(str)
 	}
 	return str
 }
+ */
