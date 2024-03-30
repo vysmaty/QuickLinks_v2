@@ -322,7 +322,8 @@ OpenFavorite(ItemName, LinkTargetPath, LinkPath, *)
 	{
 		if VerCompare(A_OSVersion, "10.0.22000") >= 0 ; Windows 11 and later
 		{
-			try GetActiveExplorerTab().Navigate(ExpandEnvironmentStrings(&path)) ; TODO: Test after function switch.
+			ExpandEnvironmentStrings(&path)
+			try GetActiveExplorerTab().Navigate(path)
 		}
 		else
 		{
@@ -520,17 +521,3 @@ ExpandEnvironmentStrings(&vInputString)
 	; return success
 	Return True
 }
-
-/* 
-; TODO: Remove Duplicate function
-ExpandEnvironmentStrings(str)
-{
-	if sz := DllCall("ExpandEnvironmentStrings", "Str", str, "Ptr", 0, "UInt", 0)
-	{
-		buf := Buffer(sz * 2)
-		if DllCall("ExpandEnvironmentStrings", "Str", str, "Ptr", buf, "UInt", sz)
-			return StrGet(buf)
-	}
-	return str
-}
- */
