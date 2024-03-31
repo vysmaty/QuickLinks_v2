@@ -13,6 +13,18 @@
 #Requires AutoHotkey v2
 #SingleInstance Force
 
+; Read setings from \settings.ini
+OutputDebug "Retrived settings:`n"
+section := IniRead(A_ScriptDir "\settings.ini", "settings")
+setting := {} ;Object for properies and items.
+Loop Parse, section, "`n", "`r"
+{
+	pos := InStr(a_loopField, "=", , 1) - 1
+	ini_key := SubStr(a_loopField, 1, pos)
+	ini_value := SubStr(a_loopField, pos + 2)
+	setting.%ini_key% := ini_value
+	OutputDebug ini_key "=" setting.%ini_key% "`n"
+}
 
 ; DEBUG: Dále je kód z Easy Access to Favorite Folders
 ;----
@@ -86,10 +98,22 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			}
 
 			this.oMenu.%Folder2Menu%.Add(Folder1, this.oMenu.%Folder1Menu%) ; Create submenu
+
+
 			; TODO: FIXME: This loops to many times. Icon could be set only for first time. Same for submenu? To many requests for ini & checks for tmp non available folders.
 			;-> rewrite oMenu? parse separately folders and separately .ink files? Possibly it would be possible to make links from submenus
-			;this.Icon_Folder_Add(this.oMenu.%Folder2Menu%, Folder1, FolderPath) ; icon for folder
-			this.oMenu.%Folder2Menu%.SetIcon(Folder1, A_Windir "\syswow64\SHELL32.dll", "5") ; icon for folder
+
+			;icon for folder
+			if (setting.enable_menu_folder_icon = "true")
+			{
+				; set folder icon from Desktop.ini
+				this.Icon_Folder_Add(this.oMenu.%Folder2Menu%, Folder1, FolderPath)
+			}
+			else
+			{
+				; set default folder icon
+				this.oMenu.%Folder2Menu%.SetIcon(Folder1, A_Windir "\syswow64\SHELL32.dll", "5")
+			}
 
 		}
 		;this.oMenu.%this.QL_Link_Dir%.Add("Reload QuickLinks", this.Recreate.Bind(this, this.QL_Link_Dir)) ; FIXME: Add command to Recreate Menu
@@ -202,19 +226,19 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 	; to FIXME: unable to read .txt file Why? Improve metod and - try catch -> OutputDebug message.
 	getExtIcon(Ext) {
-		try{
-		from := RegRead("HKEY_CLASSES_ROOT\." Ext)
-		DefaultIcon := RegRead("HKEY_CLASSES_ROOT\" from "\DefaultIcon")
-		; TODO: Use for path env ExpandEnvironmentStrings or ConvertToAbsolutePath
-		DefaultIcon := StrReplace(DefaultIcon, '"')
-		DefaultIcon := StrReplace(DefaultIcon, "%SystemRoot%", A_WinDir)
-		DefaultIcon := StrReplace(DefaultIcon, "%ProgramFiles%", A_ProgramFiles)
-		DefaultIcon := StrReplace(DefaultIcon, "%windir%", A_WinDir)
+		try {
+			from := RegRead("HKEY_CLASSES_ROOT\." Ext)
+			DefaultIcon := RegRead("HKEY_CLASSES_ROOT\" from "\DefaultIcon")
+			; TODO: Use for path env ExpandEnvironmentStrings or ConvertToAbsolutePath
+			DefaultIcon := StrReplace(DefaultIcon, '"')
+			DefaultIcon := StrReplace(DefaultIcon, "%SystemRoot%", A_WinDir)
+			DefaultIcon := StrReplace(DefaultIcon, "%ProgramFiles%", A_ProgramFiles)
+			DefaultIcon := StrReplace(DefaultIcon, "%windir%", A_WinDir)
 
-		I := StrSplit(DefaultIcon, ",")
+			I := StrSplit(DefaultIcon, ",")
 
-		Return I[1] " - " this.IndexOfIconResource(I[1], RegExReplace(I[2], "[^\d]+"))
-	}
+			Return I[1] " - " this.IndexOfIconResource(I[1], RegExReplace(I[2], "[^\d]+"))
+		}
 	}
 
 	IndexOfIconResource(Filename, ID) {
@@ -327,14 +351,23 @@ OpenFavorite(ItemName, LinkTargetPath, LinkPath, *)
 		Send "cd " path "{Enter}"
 		return
 	}
+
 	; Since the above didn't return, one of the following is true:
 	; 1) It's an unsupported window type but g_AlwaysShowMenu is true.
 	; Yes. It is. ;)
 
-	;Run "explorer " path  ; Might work on more systems without double quotes.
-
-	;Run LinkPath ; .Ink file call variant. Open existent window. But non consistent.
-	Run_explorer(path) ; TODO: Testing.
+	; Open File/Folder/Link
+	if (setting.enable_find_explorer = "true")
+	{
+		; Try to find an existing Windows Explorer window with the same path before opening a new one.
+		Run_explorer(path)
+	}
+	else
+	{
+		; Open .Ink file. Sometimes opens existing window.
+		Run LinkPath
+		;Run "explorer " path  ; Might work on more systems without double quotes.
+	}
 }
 
 ;----Read Desktop.ini for information about Folder icon
@@ -488,6 +521,7 @@ GetActiveExplorerTab(hwnd := WinExist("A")) {
 	}
 }
 
+; TODO: Duplicate function
 ExpandEnvVars(str)
 {
 	if sz := DllCall("ExpandEnvironmentStrings", "Str", str, "Ptr", 0, "UInt", 0)
