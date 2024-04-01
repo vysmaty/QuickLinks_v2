@@ -9,14 +9,18 @@
 ; Updates 2023-11-22:
 ; - Moved to a class
 
+; Objev - Menu je navigovatelné klávesnicí
 
 #Requires AutoHotkey v2
 #SingleInstance Force
 
+; TODO: #15 Translations
+lang := {} ;Object for properies and items.
+lang.edit_links := "Edit QuickLinks"
+lang.reload_links := "Reload QuickLinks"
 
 ; DEBUG: Dále je kód z Easy Access to Favorite Folders
 ;----
-oMenu := {}
 g_AlwaysShowMenu := true
 g_Paths := []
 g_window_id := 0
@@ -24,7 +28,7 @@ g_class := ""
 
 ; DEBUG:
 
-oMenu := QuickLinksMenu(QL_Link_Dir := "Links")
+oMenu := QuickLinksMenu(QL_Menu_Name := "Links")
 TrayTip("Press the [Capslock] key to show the menu")
 ;return
 
@@ -34,21 +38,23 @@ CapsLock:: {
 	OutputDebug 'The menu was requested.`n'
 	DisplayMenu
 	return
-}
+} ;
 
-; TODO: START OF THINGS
+
+; TODO: #13 Make QuickLinksMenu more independent
 
 Class QuickLinksMenu { ; Just run it one time at the start.
 
-	__New(QL_Link_Dir) {
+	__New(QL_Menu_Name) {
 		this.oMenu := {}
-		this.InitMenu(QL_Link_Dir)
+		this.CreateMenu(QL_Menu_Name)
 	}
-	; TODO: FIXME: Možná nebude vůbec potřeba to rozdělovat. Záleží na tom, jak to budeme znovuvytvářet.
-	InitMenu(QL_Link_Dir) {
-		this.QL_Link_Dir := QL_Link_Dir
-		If !InStr(QL_Link_Dir, "\") {
-			QL_Link_Dir := A_ScriptDir "\" QL_Link_Dir
+
+	; Create menu
+	CreateMenu(QL_Menu_Name) {
+		this.QL_Menu_Name := QL_Menu_Name
+		If !InStr(QL_Menu_Name, "\") {
+			QL_Link_Dir := A_ScriptDir "\" QL_Menu_Name
 		}
 
 		SplitPath(QL_Link_Dir, &QL_Menu)
@@ -56,8 +62,8 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		If !FileExist(QL_Link_Dir) {
 			DirCreate(QL_Link_Dir)
 		}
-		FileCreateShortcut(QL_Link_Dir, QL_Link_Dir "\" QL_Menu ".lnk")
 
+		; TODO: #12 Loop throuh Folders Separately
 		Loop Files, QL_Link_Dir "\*.*", "FR"
 		{
 			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "R") or InStr(A_LoopFileAttrib, "S") ;Skip any file that is H, R, or S (System).
@@ -89,27 +95,44 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			; TODO: FIXME: This loops to many times. Icon could be set only for first time. Same for submenu? To many requests for ini & checks for tmp non available folders.
 			;-> rewrite oMenu? parse separately folders and separately .ink files? Possibly it would be possible to make links from submenus
 			;this.Icon_Folder_Add(this.oMenu.%Folder2Menu%, Folder1, FolderPath) ; icon for folder
-			this.oMenu.%Folder2Menu%.SetIcon(Folder1, A_Windir "\syswow64\SHELL32.dll", "5") ; icon for folder
+			this.oMenu.%Folder2Menu%.SetIcon(Folder1, A_Windir "\syswow64\SHELL32.dll", "5") ; icon for folder ; TODO: Syswow64 vs System32
 
 		}
-		;this.oMenu.%this.QL_Link_Dir%.Add("Reload QuickLinks", this.Recreate.Bind(this, this.QL_Link_Dir)) ; FIXME: Add command to Recreate Menu
+
+		; Commands section of the menu
+		this.oMenu.%this.QL_Menu_Name%.Add() ; Adding a line separating items from Commands.
+
+		; Edit Links - Comand for opening folder with Ink's.
+		this.Command_Set(this.oMenu.%this.QL_Menu_Name%, lang.edit_links, QL_Link_Dir)
+		; this.oMenu.%this.QL_Menu_Name%.SetIcon(lang.edit_links, A_Windir "\syswow64\SHELL32.dll", "5") ; optional icon for Edit Links ;
+
+
+		; Reload Links - Command for recreating menu. Rescan Ink's, icons and folders.
+		;if (setting.enable_command_reload_QL = "true") ; TODO: Enable and ad to settings.ini after merge to dev.
+		;{
+		this.oMenu.%this.QL_Menu_Name%.Add(lang.reload_links, this.Recreate.Bind(this))
+		;}
+
 		return this.oMenu
 	}
 
-	Recreate(QL_Link_Dir) { ;FIXME:
-		OutputDebug 'Recreate called.'
-		;this.oMenu := {}
-		;this.InitMenu(QL_Link_Dir)
-		;return this.oMenu
-	}
-
+	; Show Menu
 	Show() {
 		;Refresh DarkMode state when menu Called.
 		LightTheme := RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme")
 		if !LightTheme {
 			this.SetDarkMode()
 		}
-		this.oMenu.%this.QL_Link_Dir%.Show()
+		this.oMenu.%this.QL_Menu_Name%.Show()
+	}
+
+	; Re-create the menu and display it
+	Recreate(*) {
+		OutputDebug '`nRecreate called for new menu: "' QL_Menu_Name '".`n'
+		this.oMenu := {}
+		this.CreateMenu(QL_Menu_Name)
+		this.oMenu.%this.QL_Menu_Name%.Show()
+		return
 	}
 
 	Command_Set(menuitem, linkname, LoopFileFullPath) { ; set command based on extention or name
@@ -202,19 +225,19 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 	; to FIXME: unable to read .txt file Why? Improve metod and - try catch -> OutputDebug message.
 	getExtIcon(Ext) {
-		try{
-		from := RegRead("HKEY_CLASSES_ROOT\." Ext)
-		DefaultIcon := RegRead("HKEY_CLASSES_ROOT\" from "\DefaultIcon")
-		; TODO: Use for path env ExpandEnvironmentStrings or ConvertToAbsolutePath
-		DefaultIcon := StrReplace(DefaultIcon, '"')
-		DefaultIcon := StrReplace(DefaultIcon, "%SystemRoot%", A_WinDir)
-		DefaultIcon := StrReplace(DefaultIcon, "%ProgramFiles%", A_ProgramFiles)
-		DefaultIcon := StrReplace(DefaultIcon, "%windir%", A_WinDir)
+		try {
+			from := RegRead("HKEY_CLASSES_ROOT\." Ext)
+			DefaultIcon := RegRead("HKEY_CLASSES_ROOT\" from "\DefaultIcon")
+			; TODO: Use for path env ExpandEnvironmentStrings or ConvertToAbsolutePath
+			DefaultIcon := StrReplace(DefaultIcon, '"')
+			DefaultIcon := StrReplace(DefaultIcon, "%SystemRoot%", A_WinDir)
+			DefaultIcon := StrReplace(DefaultIcon, "%ProgramFiles%", A_ProgramFiles)
+			DefaultIcon := StrReplace(DefaultIcon, "%windir%", A_WinDir)
 
-		I := StrSplit(DefaultIcon, ",")
+			I := StrSplit(DefaultIcon, ",")
 
-		Return I[1] " - " this.IndexOfIconResource(I[1], RegExReplace(I[2], "[^\d]+"))
-	}
+			Return I[1] " - " this.IndexOfIconResource(I[1], RegExReplace(I[2], "[^\d]+"))
+		}
 	}
 
 	IndexOfIconResource(Filename, ID) {
