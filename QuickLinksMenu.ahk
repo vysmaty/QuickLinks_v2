@@ -14,6 +14,19 @@
 #Requires AutoHotkey v2
 #SingleInstance Force
 
+; Read setings from \settings.ini
+OutputDebug "Retrived settings:`n"
+section := IniRead(A_ScriptDir "\settings.ini", "settings")
+setting := {} ;Object for properies and items.
+Loop Parse, section, "`n", "`r"
+{
+	pos := InStr(a_loopField, "=", , 1) - 1
+	ini_key := SubStr(a_loopField, 1, pos)
+	ini_value := SubStr(a_loopField, pos + 2)
+	setting.%ini_key% := ini_value
+	OutputDebug ini_key "=" setting.%ini_key% "`n"
+}
+
 ; TODO: #15 Translations
 lang := {} ;Object for properies and items.
 lang.edit_links := "Edit QuickLinks"
@@ -92,10 +105,22 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			}
 
 			this.oMenu.%Folder2Menu%.Add(Folder1, this.oMenu.%Folder1Menu%) ; Create submenu
+
+
 			; TODO: FIXME: This loops to many times. Icon could be set only for first time. Same for submenu? To many requests for ini & checks for tmp non available folders.
 			;-> rewrite oMenu? parse separately folders and separately .ink files? Possibly it would be possible to make links from submenus
-			;this.Icon_Folder_Add(this.oMenu.%Folder2Menu%, Folder1, FolderPath) ; icon for folder
-			this.oMenu.%Folder2Menu%.SetIcon(Folder1, A_Windir "\syswow64\SHELL32.dll", "5") ; icon for folder ; TODO: Syswow64 vs System32
+
+			;icon for folder
+			if (setting.enable_menu_folder_icon = "true")
+			{
+				; set folder icon from Desktop.ini
+				this.Icon_Folder_Add(this.oMenu.%Folder2Menu%, Folder1, FolderPath)
+			}
+			else
+			{
+				; set default folder icon
+				this.oMenu.%Folder2Menu%.SetIcon(Folder1, A_Windir "\syswow64\SHELL32.dll", "5")
+			}
 
 		}
 
@@ -321,7 +346,8 @@ OpenFavorite(ItemName, LinkTargetPath, LinkPath, *)
 	{
 		if VerCompare(A_OSVersion, "10.0.22000") >= 0 ; Windows 11 and later
 		{
-			try GetActiveExplorerTab().Navigate(ExpandEnvVars(path))
+			ExpandEnvironmentStrings(&path)
+			try GetActiveExplorerTab().Navigate(path)
 		}
 		else
 		{
@@ -350,14 +376,23 @@ OpenFavorite(ItemName, LinkTargetPath, LinkPath, *)
 		Send "cd " path "{Enter}"
 		return
 	}
+
 	; Since the above didn't return, one of the following is true:
 	; 1) It's an unsupported window type but g_AlwaysShowMenu is true.
 	; Yes. It is. ;)
 
-	;Run "explorer " path  ; Might work on more systems without double quotes.
-
-	;Run LinkPath ; .Ink file call variant. Open existent window. But non consistent.
-	Run_explorer(path) ; TODO: Testing.
+	; Open File/Folder/Link
+	if (setting.enable_find_explorer = "true")
+	{
+		; Try to find an existing Windows Explorer window with the same path before opening a new one.
+		Run_explorer(path)
+	}
+	else
+	{
+		; Open .Ink file. Sometimes opens existing window.
+		Run LinkPath
+		;Run "explorer " path  ; Might work on more systems without double quotes.
+	}
 }
 
 ;----Read Desktop.ini for information about Folder icon
@@ -384,25 +419,6 @@ ConvertToAbsolutePath(relativePath, basePath) {
 		return relativePath ; Path is already absolute
 	else
 		return basePath . "\" . relativePath ; ; Convert to absolute
-}
-
-ExpandEnvironmentStrings(&vInputString)
-{
-	; get the required size for the expanded string
-	vSizeNeeded := DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Int", 0, "Int", 0)
-	If (vSizeNeeded == "" || vSizeNeeded <= 0)
-		return False ; unable to get the size for the expanded string for some reason
-
-	vByteSize := vSizeNeeded + 1
-	VarSetStrCapacity(&vTempValue, vByteSize)
-
-	; attempt to expand the environment string
-	If (!DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Str", vTempValue, "Int", vSizeNeeded))
-		return False ; unable to expand the environment string
-	vInputString := vTempValue
-
-	; return success
-	Return True
 }
 
 ; Unused part of Code
@@ -511,13 +527,21 @@ GetActiveExplorerTab(hwnd := WinExist("A")) {
 	}
 }
 
-ExpandEnvVars(str)
+ExpandEnvironmentStrings(&vInputString)
 {
-	if sz := DllCall("ExpandEnvironmentStrings", "Str", str, "Ptr", 0, "UInt", 0)
-	{
-		buf := Buffer(sz * 2)
-		if DllCall("ExpandEnvironmentStrings", "Str", str, "Ptr", buf, "UInt", sz)
-			return StrGet(buf)
-	}
-	return str
+	; get the required size for the expanded string
+	vSizeNeeded := DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Int", 0, "Int", 0)
+	If (vSizeNeeded == "" || vSizeNeeded <= 0)
+		return False ; unable to get the size for the expanded string for some reason
+
+	vByteSize := vSizeNeeded + 1
+	VarSetStrCapacity(&vTempValue, vByteSize)
+
+	; attempt to expand the environment string
+	If (!DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Str", vTempValue, "Int", vSizeNeeded))
+		return False ; unable to expand the environment string
+	vInputString := vTempValue
+
+	; return success
+	Return True
 }
