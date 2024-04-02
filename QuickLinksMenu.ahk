@@ -83,8 +83,15 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		; TODO: #12 Loop throuh Folders Separately
 		Loop Files, QL_Link_Dir "\*.*", "FR"
 		{
-			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "R") or InStr(A_LoopFileAttrib, "S") ;Skip any file that is H, R, or S (System).
+
+			;Skip any file that is H, R, or S (System).
+			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "R") or InStr(A_LoopFileAttrib, "S")
 				continue
+
+			; Skip any file that matches:
+			if (A_LoopFileName = "Desktop.ini")
+				continue
+
 
 			Folder1 := RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*)\\([^\\]*)\\([^\\]*)", "$2")
 			FolderPath := RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*)\\([^\\]*)\\([^\\]*)", "$1\$2")
@@ -320,20 +327,20 @@ DisplayMenu(*)
 	{
 		;; Exceptions
 		;; If Application Is
-/* 
-		switch
-		{
-			case (g_class ~= "example_unset_value1|example_unset_value2"):
-				OutputDebug 'The menu will not be displayed because the window class matches the set exception `n'
-				return
-			case (g_process ~= "Code.exe"): return
-				OutputDebug "The menu will not be displayed because the window process matches the set exception `n"
-				return
-			case (g_title ~= "example_unset_value1|example_unset_value2"):
-				OutputDebug "The menu will not be displayed because the window title matches the set exception `n"
-				return
-		}
-		 */
+		/*
+				switch
+				{
+					case (g_class ~= "example_unset_value1|example_unset_value2"):
+						OutputDebug 'The menu will not be displayed because the window class matches the set exception `n'
+						return
+					case (g_process ~= "Code.exe"): return
+						OutputDebug "The menu will not be displayed because the window process matches the set exception `n"
+						return
+					case (g_title ~= "example_unset_value1|example_unset_value2"):
+						OutputDebug "The menu will not be displayed because the window title matches the set exception `n"
+						return
+				}
+		*/
 		; Since it's of this window type, don't display menu.
 
 
