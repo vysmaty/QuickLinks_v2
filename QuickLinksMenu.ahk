@@ -36,13 +36,17 @@ lang.tray_tip := "Press [Ctrl + Right Mouse Button] to show the menu"
 
 ; DEBUG: Dále je kód z Easy Access to Favorite Folders
 g_Paths := []
-g_window_id := 0
-g_class := ""
-
 ; DEBUG:
 
+; Global Variables
+g_window_id := 0
+g_class := ""
+g_title := ""
+g_process := ""
+
+; Startup
 oMenu := QuickLinksMenu(QL_Menu_Name := "Links")
-TrayTip("Press the [Capslock] key to show the menu")
+TrayTip(lang.tray_tip)
 ;return
 
 ^RButton::
@@ -308,10 +312,39 @@ DisplayMenu(*)
 	; These first few variables are set here and used by OpenFavorite:
 	try global g_window_id := WinGetID("A")
 	try global g_class := WinGetClass(g_window_id)
-	if g_AlwaysShowMenu = false  ; The menu should be shown only selectively.
+	try global g_title := WinGetTitle(g_window_id)
+	try global g_process := WinGetProcessName(g_window_id)
+
+	; Set exceptions or set exclusivity
+	if setting.always_show_menu = "false" ; The menu should be shown only if application
 	{
-		if !(g_class ~= "#32770|ExploreWClass|CabinetWClass|ConsoleWindowClass|CASCADIA_HOSTING_WINDOW_CLASS")
-			return ; Since it's some other window type, don't display menu.
+		;; Exceptions
+		;; If Application Is
+/* 
+		switch
+		{
+			case (g_class ~= "example_unset_value1|example_unset_value2"):
+				OutputDebug 'The menu will not be displayed because the window class matches the set exception `n'
+				return
+			case (g_process ~= "Code.exe"): return
+				OutputDebug "The menu will not be displayed because the window process matches the set exception `n"
+				return
+			case (g_title ~= "example_unset_value1|example_unset_value2"):
+				OutputDebug "The menu will not be displayed because the window title matches the set exception `n"
+				return
+		}
+		 */
+		; Since it's of this window type, don't display menu.
+
+
+		;; Or Exclusivity
+		;; If Application Is Not
+		/*
+				if !(g_class ~= "#32770|ExploreWClass|CabinetWClass|ConsoleWindowClass|CASCADIA_HOSTING_WINDOW_CLASS")
+					return ; Since it's some other window type, don't display menu.
+		*/
+		; Since it's some other window type, don't display menu.
+
 	}
 	; Otherwise, the menu should be presented for this type of window:
 	oMenu.Show()
