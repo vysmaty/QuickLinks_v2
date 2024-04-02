@@ -28,13 +28,13 @@ Loop Parse, section, "`n", "`r"
 }
 
 ; TODO: #15 Translations
+; Read translations from \lang_en.ini
 lang := {} ;Object for properies and items.
 lang.edit_links := "Edit QuickLinks"
 lang.reload_links := "Reload QuickLinks"
+lang.tray_tip := "Press [Ctrl + Right Mouse Button] to show the menu"
 
 ; DEBUG: Dále je kód z Easy Access to Favorite Folders
-;----
-g_AlwaysShowMenu := true
 g_Paths := []
 g_window_id := 0
 g_class := ""
@@ -46,8 +46,8 @@ TrayTip("Press the [Capslock] key to show the menu")
 ;return
 
 ^RButton::
-#y::
-CapsLock:: {
+;CapsLock:: ; Example of adding another trigger.
+{
 	OutputDebug 'The menu was requested.`n'
 	DisplayMenu
 	return
