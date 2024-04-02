@@ -211,19 +211,18 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			return
 		}
 
-		;else File
-		Extension := RegExReplace(File, "([^\.]*)(\.[^\.]*).*", "$2")
-		;Extension2 := RegExReplace(File, "([^\.]*)(\..*)", "$2") ;Unused part of code.
+		SplitPath File , , , &Extension
+		
 		Icon_nr := 0
 
-		If (Extension = ".exe") {
+		If (Extension = "exe") {
 			try {
 				menuitem.SetIcon(submenu, file, "1")
 			}
 			return
 		}
 
-		IconFile := this.getExtIcon(StrReplace(Extension, "."))
+		IconFile := this.getExtIcon(Extension)
 
 		; Manualy Set Icons for Selected Extensions
 
@@ -237,19 +236,17 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		*/
 
 		switch (Extension) {
-			case InStr(Extension, "\"):
-				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", 5)
-			case ".url":
+			case "url":
 				menuitem.SetIcon(submenu, A_Windir "\system32\Imageres.dll", -1010)
-			case ".ahk":
+			case "ahk":
 				menuitem.SetIcon(submenu, "autohotkey.exe", 2)
-			case ".jpg", ".png":
+			case "jpg", "png":
 				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -236)
-			case ".txt":
-				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -235)
+			case "txt":
+				menuitem.SetIcon(submenu, A_Windir "\syswow64\shell32.dll", -235)
 
 			default:
-				; If icon is specified as "file - index" ; Untested.
+				; If icon is specified as "file - index" ; Untested. TODO: With REGISTRY FIXING.
 				if (InStr(IconFile, " - ")) {
 			try {
 				RegExMatch(IconFile, "(.*) - (\d*)", &IconFile)
