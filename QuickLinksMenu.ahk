@@ -28,26 +28,30 @@ Loop Parse, section, "`n", "`r"
 }
 
 ; TODO: #15 Translations
+; Read translations from \lang_en.ini
 lang := {} ;Object for properies and items.
 lang.edit_links := "Edit QuickLinks"
 lang.reload_links := "Reload QuickLinks"
+lang.tray_tip := "Press [Ctrl + Right Mouse Button] to show the menu"
 
 ; DEBUG: Dále je kód z Easy Access to Favorite Folders
-;----
-g_AlwaysShowMenu := true
 g_Paths := []
-g_window_id := 0
-g_class := ""
-
 ; DEBUG:
 
+; Global Variables
+g_window_id := 0
+g_class := ""
+g_title := ""
+g_process := ""
+
+; Startup
 oMenu := QuickLinksMenu(QL_Menu_Name := "Links")
-TrayTip("Press the [Capslock] key to show the menu")
+TrayTip(lang.tray_tip)
 ;return
 
 ^RButton::
-#y::
-CapsLock:: {
+;CapsLock:: ; Example of adding another trigger.
+{
 	OutputDebug 'The menu was requested.`n'
 	DisplayMenu
 	return
@@ -79,8 +83,15 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		; TODO: #12 Loop throuh Folders Separately
 		Loop Files, QL_Link_Dir "\*.*", "FR"
 		{
-			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "R") or InStr(A_LoopFileAttrib, "S") ;Skip any file that is H, R, or S (System).
+
+			;Skip any file that is H, R, or S (System).
+			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "R") or InStr(A_LoopFileAttrib, "S")
 				continue
+
+			; Skip any file that matches:
+			if (A_LoopFileName = "Desktop.ini")
+				continue
+
 
 			Folder1 := RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*)\\([^\\]*)\\([^\\]*)", "$2")
 			FolderPath := RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*)\\([^\\]*)\\([^\\]*)", "$1\$2")
@@ -308,10 +319,39 @@ DisplayMenu(*)
 	; These first few variables are set here and used by OpenFavorite:
 	try global g_window_id := WinGetID("A")
 	try global g_class := WinGetClass(g_window_id)
-	if g_AlwaysShowMenu = false  ; The menu should be shown only selectively.
+	try global g_title := WinGetTitle(g_window_id)
+	try global g_process := WinGetProcessName(g_window_id)
+
+	; Set exceptions or set exclusivity
+	if setting.always_show_menu = "false" ; The menu should be shown only if application
 	{
-		if !(g_class ~= "#32770|ExploreWClass|CabinetWClass|ConsoleWindowClass|CASCADIA_HOSTING_WINDOW_CLASS")
-			return ; Since it's some other window type, don't display menu.
+		;; Exceptions
+		;; If Application Is
+		/*
+				switch
+				{
+					case (g_class ~= "example_unset_value1|example_unset_value2"):
+						OutputDebug 'The menu will not be displayed because the window class matches the set exception `n'
+						return
+					case (g_process ~= "Code.exe"): return
+						OutputDebug "The menu will not be displayed because the window process matches the set exception `n"
+						return
+					case (g_title ~= "example_unset_value1|example_unset_value2"):
+						OutputDebug "The menu will not be displayed because the window title matches the set exception `n"
+						return
+				}
+		*/
+		; Since it's of this window type, don't display menu.
+
+
+		;; Or Exclusivity
+		;; If Application Is Not
+		/*
+				if !(g_class ~= "#32770|ExploreWClass|CabinetWClass|ConsoleWindowClass|CASCADIA_HOSTING_WINDOW_CLASS")
+					return ; Since it's some other window type, don't display menu.
+		*/
+		; Since it's some other window type, don't display menu.
+
 	}
 	; Otherwise, the menu should be presented for this type of window:
 	oMenu.Show()
