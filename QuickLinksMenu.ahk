@@ -464,7 +464,7 @@ GetExplorerPath(hwnd := WinExist("A")) {
 	}
 	return false
 }
-; TODO:
+; TODO: Funkce se liší asi pouze tím, že na konci jedno vrací cestu. A druhé pouze ComObject samotný. Takže bych využil to obecnější, zkontroloval proměnnou a kliknul ctrl+tab. Bylo by vhodné přidat imeout na hledání. A případně otevřít nové okno.
 
 ; Get the WebBrowser object of the active Explorer tab for the given window,
 ; or the window itself if it doesn't have tabs.  Supports IE and File Explorer.
