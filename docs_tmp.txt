@@ -1,0 +1,1 @@
+;Docs: Settings are strored at: \setting.ini
