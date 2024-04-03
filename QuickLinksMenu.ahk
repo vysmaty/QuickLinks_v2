@@ -34,8 +34,8 @@ lang.edit_links := "Edit QuickLinks"
 lang.reload_links := "Reload QuickLinks"
 lang.tray_tip := "Press [Ctrl + Right Mouse Button] to show the menu"
 
-; DEBUG: Dále je kód z Easy Access to Favorite Folders
-g_Paths := []
+; DEBUG:
+; g_Paths := [] try to remove after testing
 ; DEBUG:
 
 ; Global Variables
@@ -49,6 +49,7 @@ oMenu := QuickLinksMenu(QL_Menu_Name := "Links")
 TrayTip(lang.tray_tip)
 ;return
 
+; Hotkeys
 ^RButton::
 ;CapsLock:: ; Example of adding another trigger.
 {
@@ -59,7 +60,7 @@ TrayTip(lang.tray_tip)
 
 
 ; TODO: #13 Make QuickLinksMenu more independent
-
+; Class with Menu
 Class QuickLinksMenu { ; Just run it one time at the start.
 
 	__New(QL_Menu_Name) {
@@ -144,10 +145,10 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 
 		; Reload Links - Command for recreating menu. Rescan Ink's, icons and folders.
-		;if (setting.enable_command_reload_QL = "true") ; TODO: Enable and ad to settings.ini after merge to dev.
-		;{
+		if (setting.enable_command_reload_QL = "true")
+		{
 		this.oMenu.%this.QL_Menu_Name%.Add(lang.reload_links, this.Recreate.Bind(this))
-		;}
+		}
 
 		return this.oMenu
 	}
@@ -211,8 +212,8 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			return
 		}
 
-		SplitPath File , , , &Extension
-		
+		SplitPath File, , , &Extension
+
 		Icon_nr := 0
 
 		If (Extension = "exe") {
@@ -248,15 +249,15 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			default:
 				; If icon is specified as "file - index" ; Untested. TODO: With REGISTRY FIXING.
 				if (InStr(IconFile, " - ")) {
-			try {
-				RegExMatch(IconFile, "(.*) - (\d*)", &IconFile)
-				menuitem.SetIcon(submenu, IconFile[1], IconFile[2])
-			}
+					try {
+						RegExMatch(IconFile, "(.*) - (\d*)", &IconFile)
+						menuitem.SetIcon(submenu, IconFile[1], IconFile[2])
+					}
 					catch {
 						MsgBox(IconFile[1] "`n" IconFile[2] "`nNext: " . Extension)
 					}
-			}
-			return
+				}
+				return
 		}
 	}
 
@@ -482,7 +483,6 @@ IsFolderPath(path) {
 }
 */
 
-; TODO: Untested.
 Run_explorer(path) {
 	OutputDebug "Called Function Run_Explorer with path: " path "`n"
 	EnPath := '"' path '"'
@@ -503,43 +503,37 @@ Run_explorer(path) {
 					throw Error("ID is not Integer")
 				}
 				WinActivate "ahk_id" ID
-				; TODO: #11 Activate and Find Tab
 
-/* 
-				; TODO: Add to Settings.
-				;enable_find_explorer_tab = true
-				; When enabled, it tries to Switch to Tab of Active Windows Explorer window with the same path as requested.
-				if (enable_find_explorer_tab = "true")
-				{
- */
+
 				; Try to find and Activate Tab
-				; If Windows 11 and later
-				if VerCompare(A_OSVersion, "10.0.22000") >= 0
-					;https://www.autohotkey.com/boards/viewtopic.php?t=109907
+				if (setting.enable_find_explorer_tab = "true")
 				{
-					loop 25 { ; Set Hard Limit 25 times switch tab. For Safety. If someone requests it, we can add it to the settings.
-						explorer_tab_path := GetActiveExplorerTab(ID).Document.Folder.Self.Path
-						OutputDebug "Active Tab Path: " explorer_tab_path "`n"
-						If (explorer_tab_path = path)
-						{
-							OutputDebug "Successfully Found Tab: " explorer_tab_path "`n"
-							break
-						}
+					; If Windows 11 and later
+					if VerCompare(A_OSVersion, "10.0.22000") >= 0
+						;https://www.autohotkey.com/boards/viewtopic.php?t=109907
+					{
+						loop 25 { ; Set Hard Limit 25 times switch tab. For Safety. If someone requests it, we can add it to the settings.
+							explorer_tab_path := GetActiveExplorerTab(ID).Document.Folder.Self.Path
+							OutputDebug "Active Tab Path: " explorer_tab_path "`n"
+							If (explorer_tab_path = path)
+							{
+								OutputDebug "Successfully Found Tab: " explorer_tab_path "`n"
+								break
+							}
 
-						If not (WinActive(ID)) {
-						; Fallback
-						OutputDebug "Window is no longer active! Or something's gone bad. Fallback to Open As New.`n"
-						Run(path)
-						}
+							If not (WinActive(ID)) {
+								; Fallback
+								OutputDebug "Window is no longer active! Or something's gone bad. Fallback to Open As New.`n"
+								Run(path)
+							}
 
-						; Switch to Next Tab
-						Send "^{Tab}"
-						Sleep (500)
+							; Switch to Next Tab
+							Send "^{Tab}"
+							Sleep (500)
+						}
 					}
 				}
-/* 				
-			}
- */
+
 				; If Not Windows 11 and later
 				break
 			}
