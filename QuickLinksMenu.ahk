@@ -484,6 +484,7 @@ IsFolderPath(path) {
 
 ; TODO: Untested.
 Run_explorer(path) {
+	OutputDebug "Called Function Run_Explorer with path: " path "`n"
 	EnPath := '"' path '"'
 
 	list := explorer_list()
@@ -495,15 +496,52 @@ Run_explorer(path) {
 			If InStr(A_LoopField, EnPath)
 			{
 				ID := StrSplit(A_LoopField, "_")[1]
-				WinActivate("ahk_id " ID)
-				; TODO: Activate and Find Tab!
+				OutputDebug "Unique ID of Window/Control From Explorer List: '" ID "'`n"
+				if IsInteger(ID)
+					ID := Integer(ID)
+				else {
+					throw Error("ID is not Integer")
+				}
+				WinActivate "ahk_id" ID
+				; TODO: #11 Activate and Find Tab
 
-				/* 				if VerCompare(A_OSVersion, "10.0.22000") >= 0 ; Windows 11 and later
-									;https://www.autohotkey.com/boards/viewtopic.php?t=109907
-									;{
-									;}
-									break
-				*/
+/* 
+				; TODO: Add to Settings.
+				;enable_find_explorer_tab = true
+				; When enabled, it tries to Switch to Tab of Active Windows Explorer window with the same path as requested.
+				if (enable_find_explorer_tab = "true")
+				{
+ */
+				; Try to find and Activate Tab
+				; If Windows 11 and later
+				if VerCompare(A_OSVersion, "10.0.22000") >= 0
+					;https://www.autohotkey.com/boards/viewtopic.php?t=109907
+				{
+					loop 25 { ; Set Hard Limit 25 times switch tab. For Safety. If someone requests it, we can add it to the settings.
+						explorer_tab_path := GetActiveExplorerTab(ID).Document.Folder.Self.Path
+						OutputDebug "Active Tab Path: " explorer_tab_path "`n"
+						If (explorer_tab_path = path)
+						{
+							OutputDebug "Successfully Found Tab: " explorer_tab_path "`n"
+							break
+						}
+
+						If not (WinActive(ID)) {
+						; Fallback
+						OutputDebug "Window is no longer active! Or something's gone bad. Fallback to Open As New.`n"
+						Run(path)
+						}
+
+						; Switch to Next Tab
+						Send "^{Tab}"
+						Sleep (500)
+					}
+				}
+/* 				
+			}
+ */
+				; If Not Windows 11 and later
+				break
 			}
 		}
 	}
@@ -513,7 +551,6 @@ Run_explorer(path) {
 
 explorer_list() {
 	; Get ID + fullpath of all opened explorer windows:
-	DetectHiddenWindows "On" ;TODO: Is it necesary?
 	If WinExist("ahk_class CabinetWClass") ; explorer
 	{
 		list := ""
@@ -531,34 +568,7 @@ explorer_list() {
 		list := trim(list, "`n")
 		return list
 	}
-	DetectHiddenWindows "Off" ;TODO: Is it necesary?
 }
-
-; TODO: Kód k aplikování a vyzkoušení:
-;a viz "Window.HWND and Window.Document.Folder.ahk"
-; DetectHiddenWindows
-F1:: {
-	MsgBox(GetExplorerPath())
-}
-GetExplorerPath(hwnd := WinExist("A")) {
-	activeTab := 0
-	try activeTab := ControlGetHwnd("ShellTabWindowClass1", hwnd)
-	for w in ComObject("Shell.Application").Windows {
-		if (w.hwnd != hwnd)
-			continue
-		if activeTab {
-			static IID_IShellBrowser := "{000214E2-0000-0000-C000-000000000046}"
-			shellBrowser := ComObjQuery(w, IID_IShellBrowser, IID_IShellBrowser)
-			ComCall(3, shellBrowser, "uint*", &thisTab := 0)
-			if (thisTab != activeTab)
-				continue
-		}
-		return w.Document.Folder.Self.Path
-	}
-	return false
-}
-; TODO:
-
 ; Get the WebBrowser object of the active Explorer tab for the given window,
 ; or the window itself if it doesn't have tabs.  Supports IE and File Explorer.
 ; https://www.autohotkey.com/boards/viewtopic.php?t=109907
