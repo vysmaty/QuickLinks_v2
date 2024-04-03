@@ -9,46 +9,69 @@
 ; Updates 2023-11-22:
 ; - Moved to a class
 
+; Objev - Menu je navigovatelné klávesnicí
 
 #Requires AutoHotkey v2
 #SingleInstance Force
 
+; Read setings from \settings.ini
+OutputDebug "Retrived settings:`n"
+section := IniRead(A_ScriptDir "\settings.ini", "settings")
+setting := {} ;Object for properies and items.
+Loop Parse, section, "`n", "`r"
+{
+	pos := InStr(a_loopField, "=", , 1) - 1
+	ini_key := SubStr(a_loopField, 1, pos)
+	ini_value := SubStr(a_loopField, pos + 2)
+	setting.%ini_key% := ini_value
+	OutputDebug ini_key "=" setting.%ini_key% "`n"
+}
+
+; TODO: #15 Translations
+; Read translations from \lang_en.ini
+lang := {} ;Object for properies and items.
+lang.edit_links := "Edit QuickLinks"
+lang.reload_links := "Reload QuickLinks"
+lang.tray_tip := "Press [Ctrl + Right Mouse Button] to show the menu"
 
 ; DEBUG: Dále je kód z Easy Access to Favorite Folders
-;----
-oMenu := {}
-g_AlwaysShowMenu := true
 g_Paths := []
-g_window_id := 0
-g_class := ""
-
 ; DEBUG:
 
-oMenu := QuickLinksMenu(QL_Link_Dir := "Links")
-TrayTip("Press the [Capslock] key to show the menu")
+; Global Variables
+g_window_id := 0
+g_class := ""
+g_title := ""
+g_process := ""
+
+; Startup
+oMenu := QuickLinksMenu(QL_Menu_Name := "Links")
+TrayTip(lang.tray_tip)
 ;return
 
 ^RButton::
-#y::
-CapsLock:: {
+;CapsLock:: ; Example of adding another trigger.
+{
 	OutputDebug 'The menu was requested.`n'
 	DisplayMenu
 	return
-}
+} ;
 
-; TODO: START OF THINGS
+
+; TODO: #13 Make QuickLinksMenu more independent
 
 Class QuickLinksMenu { ; Just run it one time at the start.
 
-	__New(QL_Link_Dir) {
+	__New(QL_Menu_Name) {
 		this.oMenu := {}
-		this.InitMenu(QL_Link_Dir)
+		this.CreateMenu(QL_Menu_Name)
 	}
-	; TODO: FIXME: Možná nebude vůbec potřeba to rozdělovat. Záleží na tom, jak to budeme znovuvytvářet.
-	InitMenu(QL_Link_Dir) {
-		this.QL_Link_Dir := QL_Link_Dir
-		If !InStr(QL_Link_Dir, "\") {
-			QL_Link_Dir := A_ScriptDir "\" QL_Link_Dir
+
+	; Create menu
+	CreateMenu(QL_Menu_Name) {
+		this.QL_Menu_Name := QL_Menu_Name
+		If !InStr(QL_Menu_Name, "\") {
+			QL_Link_Dir := A_ScriptDir "\" QL_Menu_Name
 		}
 
 		SplitPath(QL_Link_Dir, &QL_Menu)
@@ -56,12 +79,19 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		If !FileExist(QL_Link_Dir) {
 			DirCreate(QL_Link_Dir)
 		}
-		FileCreateShortcut(QL_Link_Dir, QL_Link_Dir "\" QL_Menu ".lnk")
 
+		; TODO: #12 Loop throuh Folders Separately
 		Loop Files, QL_Link_Dir "\*.*", "FR"
 		{
-			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "R") or InStr(A_LoopFileAttrib, "S") ;Skip any file that is H, R, or S (System).
+
+			;Skip any file that is H, R, or S (System).
+			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "R") or InStr(A_LoopFileAttrib, "S")
 				continue
+
+			; Skip any file that matches:
+			if (A_LoopFileName = "Desktop.ini")
+				continue
+
 
 			Folder1 := RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*)\\([^\\]*)\\([^\\]*)", "$2")
 			FolderPath := RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*)\\([^\\]*)\\([^\\]*)", "$1\$2")
@@ -86,30 +116,59 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			}
 
 			this.oMenu.%Folder2Menu%.Add(Folder1, this.oMenu.%Folder1Menu%) ; Create submenu
+
+
 			; TODO: FIXME: This loops to many times. Icon could be set only for first time. Same for submenu? To many requests for ini & checks for tmp non available folders.
 			;-> rewrite oMenu? parse separately folders and separately .ink files? Possibly it would be possible to make links from submenus
-			;this.Icon_Folder_Add(this.oMenu.%Folder2Menu%, Folder1, FolderPath) ; icon for folder
-			this.oMenu.%Folder2Menu%.SetIcon(Folder1, A_Windir "\syswow64\SHELL32.dll", "5") ; icon for folder
+
+			;icon for folder
+			if (setting.enable_menu_folder_icon = "true")
+			{
+				; set folder icon from Desktop.ini
+				this.Icon_Folder_Add(this.oMenu.%Folder2Menu%, Folder1, FolderPath)
+			}
+			else
+			{
+				; set default folder icon
+				this.oMenu.%Folder2Menu%.SetIcon(Folder1, A_Windir "\syswow64\SHELL32.dll", "5")
+			}
 
 		}
-		;this.oMenu.%this.QL_Link_Dir%.Add("Reload QuickLinks", this.Recreate.Bind(this, this.QL_Link_Dir)) ; FIXME: Add command to Recreate Menu
+
+		; Commands section of the menu
+		this.oMenu.%this.QL_Menu_Name%.Add() ; Adding a line separating items from Commands.
+
+		; Edit Links - Comand for opening folder with Ink's.
+		this.Command_Set(this.oMenu.%this.QL_Menu_Name%, lang.edit_links, QL_Link_Dir)
+		; this.oMenu.%this.QL_Menu_Name%.SetIcon(lang.edit_links, A_Windir "\syswow64\SHELL32.dll", "5") ; optional icon for Edit Links ;
+
+
+		; Reload Links - Command for recreating menu. Rescan Ink's, icons and folders.
+		;if (setting.enable_command_reload_QL = "true") ; TODO: Enable and ad to settings.ini after merge to dev.
+		;{
+		this.oMenu.%this.QL_Menu_Name%.Add(lang.reload_links, this.Recreate.Bind(this))
+		;}
+
 		return this.oMenu
 	}
 
-	Recreate(QL_Link_Dir) { ;FIXME:
-		OutputDebug 'Recreate called.'
-		;this.oMenu := {}
-		;this.InitMenu(QL_Link_Dir)
-		;return this.oMenu
-	}
-
+	; Show Menu
 	Show() {
 		;Refresh DarkMode state when menu Called.
 		LightTheme := RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme")
 		if !LightTheme {
 			this.SetDarkMode()
 		}
-		this.oMenu.%this.QL_Link_Dir%.Show()
+		this.oMenu.%this.QL_Menu_Name%.Show()
+	}
+
+	; Re-create the menu and display it
+	Recreate(*) {
+		OutputDebug '`nRecreate called for new menu: "' QL_Menu_Name '".`n'
+		this.oMenu := {}
+		this.CreateMenu(QL_Menu_Name)
+		this.oMenu.%this.QL_Menu_Name%.Show()
+		return
 	}
 
 	Command_Set(menuitem, linkname, LoopFileFullPath) { ; set command based on extention or name
@@ -152,39 +211,53 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			return
 		}
 
-		;else File
-		Extension := RegExReplace(File, "([^\.]*)(\.[^\.]*).*", "$2")
-		;Extension2 := RegExReplace(File, "([^\.]*)(\..*)", "$2") ;Unused part of code.
+		SplitPath File , , , &Extension
+		
 		Icon_nr := 0
 
-		If (Extension = ".exe") {
+		If (Extension = "exe") {
 			try {
 				menuitem.SetIcon(submenu, file, "1")
 			}
 			return
 		}
 
-		IconFile := this.getExtIcon(StrReplace(Extension, "."))
+		IconFile := this.getExtIcon(Extension)
 
-		If InStr(Extension, "\")
-			menuitem.SetIcon(submenu, A_Windir "\syswow64\SHELL32.dll", "5")
-		Else If (Extension = ".ahk")
-			menuitem.SetIcon(submenu, "autohotkey.exe", "2")
-		Else If (Extension ~= "i)\.(jpg|png)")
-			menuitem.SetIcon(submenu, A_Windir "\system32\Imageres.dll", "68")
-		Else If (Extension = ".txt")
-			menuitem.SetIcon(submenu, A_Windir "\syswow64\Notepad.exe", "0")
-		Else If InStr(IconFile, " - ") {
+		; Manualy Set Icons for Selected Extensions
+
+		; TODO: Fix Registry Search and Comment Out Sections
+		; TODO: Add Fallback for non existent files. And Log Error Message.
+		; TODO: Check Folder Icon Set
+
+		/* IconNumber
+		Type: Integer
+		If omitted, it defaults to 1 (the first icon group). Otherwise, specify the number of the icon group to be used in the file. For example, MyMenu.SetIcon(MenuItemName, "Shell32.dll", 2) would use the default icon from the second icon group. If negative, its absolute value is assumed to be the resource ID of an icon within an executable file.
+		*/
+
+		switch (Extension) {
+			case "url":
+				menuitem.SetIcon(submenu, A_Windir "\system32\Imageres.dll", -1010)
+			case "ahk":
+				menuitem.SetIcon(submenu, "autohotkey.exe", 2)
+			case "jpg", "png":
+				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -236)
+			case "txt":
+				menuitem.SetIcon(submenu, A_Windir "\syswow64\shell32.dll", -235)
+
+			default:
+				; If icon is specified as "file - index" ; Untested. TODO: With REGISTRY FIXING.
+				if (InStr(IconFile, " - ")) {
 			try {
 				RegExMatch(IconFile, "(.*) - (\d*)", &IconFile)
 				menuitem.SetIcon(submenu, IconFile[1], IconFile[2])
 			}
-			Catch {
-				MsgBox(IconFile[1] "`n" IconFile[2] "`next:" Extension)
+					catch {
+						MsgBox(IconFile[1] "`n" IconFile[2] "`nNext: " . Extension)
+					}
 			}
 			return
 		}
-		Return
 	}
 
 	Icon_Folder_Add(menuitem, submenu, FolderPath) { ; add icon for folders
@@ -260,10 +333,39 @@ DisplayMenu(*)
 	; These first few variables are set here and used by OpenFavorite:
 	try global g_window_id := WinGetID("A")
 	try global g_class := WinGetClass(g_window_id)
-	if g_AlwaysShowMenu = false  ; The menu should be shown only selectively.
+	try global g_title := WinGetTitle(g_window_id)
+	try global g_process := WinGetProcessName(g_window_id)
+
+	; Set exceptions or set exclusivity
+	if setting.always_show_menu = "false" ; The menu should be shown only if application
 	{
-		if !(g_class ~= "#32770|ExploreWClass|CabinetWClass|ConsoleWindowClass|CASCADIA_HOSTING_WINDOW_CLASS")
-			return ; Since it's some other window type, don't display menu.
+		;; Exceptions
+		;; If Application Is
+		/*
+				switch
+				{
+					case (g_class ~= "example_unset_value1|example_unset_value2"):
+						OutputDebug 'The menu will not be displayed because the window class matches the set exception `n'
+						return
+					case (g_process ~= "Code.exe"): return
+						OutputDebug "The menu will not be displayed because the window process matches the set exception `n"
+						return
+					case (g_title ~= "example_unset_value1|example_unset_value2"):
+						OutputDebug "The menu will not be displayed because the window title matches the set exception `n"
+						return
+				}
+		*/
+		; Since it's of this window type, don't display menu.
+
+
+		;; Or Exclusivity
+		;; If Application Is Not
+		/*
+				if !(g_class ~= "#32770|ExploreWClass|CabinetWClass|ConsoleWindowClass|CASCADIA_HOSTING_WINDOW_CLASS")
+					return ; Since it's some other window type, don't display menu.
+		*/
+		; Since it's some other window type, don't display menu.
+
 	}
 	; Otherwise, the menu should be presented for this type of window:
 	oMenu.Show()
@@ -298,7 +400,8 @@ OpenFavorite(ItemName, LinkTargetPath, LinkPath, *)
 	{
 		if VerCompare(A_OSVersion, "10.0.22000") >= 0 ; Windows 11 and later
 		{
-			try GetActiveExplorerTab().Navigate(ExpandEnvVars(path))
+			ExpandEnvironmentStrings(&path)
+			try GetActiveExplorerTab().Navigate(path)
 		}
 		else
 		{
@@ -327,14 +430,23 @@ OpenFavorite(ItemName, LinkTargetPath, LinkPath, *)
 		Send "cd " path "{Enter}"
 		return
 	}
+
 	; Since the above didn't return, one of the following is true:
 	; 1) It's an unsupported window type but g_AlwaysShowMenu is true.
 	; Yes. It is. ;)
 
-	;Run "explorer " path  ; Might work on more systems without double quotes.
-
-	;Run LinkPath ; .Ink file call variant. Open existent window. But non consistent.
-	Run_explorer(path) ; TODO: Testing.
+	; Open File/Folder/Link
+	if (setting.enable_find_explorer = "true")
+	{
+		; Try to find an existing Windows Explorer window with the same path before opening a new one.
+		Run_explorer(path)
+	}
+	else
+	{
+		; Open .Ink file. Sometimes opens existing window.
+		Run LinkPath
+		;Run "explorer " path  ; Might work on more systems without double quotes.
+	}
 }
 
 ;----Read Desktop.ini for information about Folder icon
@@ -361,25 +473,6 @@ ConvertToAbsolutePath(relativePath, basePath) {
 		return relativePath ; Path is already absolute
 	else
 		return basePath . "\" . relativePath ; ; Convert to absolute
-}
-
-ExpandEnvironmentStrings(&vInputString)
-{
-	; get the required size for the expanded string
-	vSizeNeeded := DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Int", 0, "Int", 0)
-	If (vSizeNeeded == "" || vSizeNeeded <= 0)
-		return False ; unable to get the size for the expanded string for some reason
-
-	vByteSize := vSizeNeeded + 1
-	VarSetStrCapacity(&vTempValue, vByteSize)
-
-	; attempt to expand the environment string
-	If (!DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Str", vTempValue, "Int", vSizeNeeded))
-		return False ; unable to expand the environment string
-	vInputString := vTempValue
-
-	; return success
-	Return True
 }
 
 ; Unused part of Code
@@ -498,13 +591,21 @@ GetActiveExplorerTab(hwnd := WinExist("A")) {
 	}
 }
 
-ExpandEnvVars(str)
+ExpandEnvironmentStrings(&vInputString)
 {
-	if sz := DllCall("ExpandEnvironmentStrings", "Str", str, "Ptr", 0, "UInt", 0)
-	{
-		buf := Buffer(sz * 2)
-		if DllCall("ExpandEnvironmentStrings", "Str", str, "Ptr", buf, "UInt", sz)
-			return StrGet(buf)
-	}
-	return str
+	; get the required size for the expanded string
+	vSizeNeeded := DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Int", 0, "Int", 0)
+	If (vSizeNeeded == "" || vSizeNeeded <= 0)
+		return False ; unable to get the size for the expanded string for some reason
+
+	vByteSize := vSizeNeeded + 1
+	VarSetStrCapacity(&vTempValue, vByteSize)
+
+	; attempt to expand the environment string
+	If (!DllCall("ExpandEnvironmentStrings", "Str", vInputString, "Str", vTempValue, "Int", vSizeNeeded))
+		return False ; unable to expand the environment string
+	vInputString := vTempValue
+
+	; return success
+	Return True
 }
