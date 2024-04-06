@@ -45,9 +45,10 @@ g_title := ""
 g_process := ""
 
 ; Startup
-oMenu := QuickLinksMenu(QL_Menu_Name := "Links")
+oMenu := QuickLinksMenu(QL_Menu := "Links")
+;oMenu := QuickLinksMenu(QL_Menu := ".\tests\base") ; Path to test files.
+
 TrayTip(lang.tray_tip)
-;return
 
 ; Hotkeys
 ^RButton::
@@ -63,28 +64,96 @@ TrayTip(lang.tray_tip)
 ; Class with Menu
 Class QuickLinksMenu { ; Just run it one time at the start.
 
-	__New(QL_Menu_Name) {
+	__New(QL_Menu) {
 		this.oMenu := {}
-		this.CreateMenu(QL_Menu_Name)
+		this.CreateMenu(QL_Menu)
 	}
 
-	; Create menu
-	CreateMenu(QL_Menu_Name) {
-		this.QL_Menu_Name := QL_Menu_Name
-		If !InStr(QL_Menu_Name, "\") {
-			QL_Link_Dir := A_ScriptDir "\" QL_Menu_Name
+	; CREATE MENU
+	CreateMenu(QL_Menu) {
+
+		; If it's not path, place it relative to the script.
+		If !InStr(QL_Menu, "\") {
+			QL_Link_Dir := A_ScriptDir "\" QL_Menu
+		}
+		else {
+			QL_Link_Dir := ConvertToAbsolutePath(QL_Menu, A_ScriptDir)
 		}
 
-		SplitPath(QL_Link_Dir, &QL_Menu)
+		SplitPath(QL_Link_Dir, &QL_MenuName)
+
+		this.QL_MenuName := QL_MenuName
 
 		If !FileExist(QL_Link_Dir) {
 			DirCreate(QL_Link_Dir)
 		}
 
-		; TODO: #12 Loop throuh Folders Separately
-		Loop Files, QL_Link_Dir "\*.*", "FR"
-		{
+		; ROOT MENU
+		this.oMenu.%this.QL_MenuName% := Menu()
 
+		; Loop through Folders & CREATE MENUS
+		OutputDebug "`nCreating Menus:`n"
+		Loop Files, QL_Link_Dir "\*", "DR" ; Get Folders & Recurse
+		{
+			;Skip any file that is H, or S (System).
+			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "S")
+				continue
+
+			OutputDebug "Adding Folder: " A_LoopFileName "`n"
+
+			; PARSE FOLDER PATH INTO VARIABLES
+			; E.g. "C:\QL\Links\directory0_example\directory1_example
+
+			; Path to Folder from A_Loopfilefullpath
+			; E.g. "C:\QL\Links\directory0_example\directory1_example"
+			FolderPath := A_Loopfilefullpath
+
+			; Path to Parent Folder from A_Loopfilefullpath
+			; E.g. "C:\QL\Links\directory0_example"
+			SplitPath(A_LoopFileFullPath, , &ParentFolderPath)
+
+			; Folder Name from A_Loopfilefullpath
+			; E.g. "directory1_example"
+			SplitPath(A_Loopfilefullpath, &FolderName)
+
+			; Path to Folder -> To (Child) Menu Name
+			; E.g. "Links$directory0_example$directory1_example"
+			Folder1Menu := QL_MenuName StrReplace(StrReplace(FolderPath, QL_Link_Dir), "\", "$")
+
+			; Path to Parent Folder -> To Parent Menu Name
+			; E.g. "Links$directory0_example"
+			Folder0Menu := QL_MenuName StrReplace(StrReplace(ParentFolderPath, QL_Link_Dir), "\", "$")
+
+			; CHILD MENU
+			if !this.oMenu.HasOwnProp(Folder1Menu) {
+				this.oMenu.%Folder1Menu% := Menu()
+			}
+
+			; PARENT MENU
+			if !this.oMenu.HasOwnProp(Folder0Menu) {
+				this.oMenu.%Folder0Menu% := Menu()
+			}
+
+			; Add Child Menu to Parent
+			this.oMenu.%Folder0Menu%.Add(FolderName, this.oMenu.%Folder1Menu%) ; Create submenu
+
+			; Set Icon to Child Menu
+			if (setting.enable_menu_folder_icon = "true")
+			{
+				; set folder icon from Desktop.ini
+				this.Icon_Folder_Add(this.oMenu.%Folder0Menu%, FolderName, FolderPath)
+			}
+			else
+			{
+				; set default folder icon
+				this.oMenu.%Folder0Menu%.SetIcon(FolderName, A_Windir "\System32\SHELL32.dll", "5")
+			}
+		}
+
+		; Loop through Files & ADD MENU ITEMS
+		OutputDebug "`nAdding menu items:`n"
+		Loop Files, QL_Link_Dir "\*.*", "FR" ; Get Files & Recurse
+		{
 			;Skip any file that is H, R, or S (System).
 			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "R") or InStr(A_LoopFileAttrib, "S")
 				continue
@@ -93,63 +162,34 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			if (A_LoopFileName = "Desktop.ini")
 				continue
 
+			; PARSE FILE PATH INTO VARIABLES
+			; E.g. "C:\QL\Links\directory0_example\directory1_example\link_example.lnk"
 
-			Folder1 := RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*)\\([^\\]*)\\([^\\]*)", "$2")
-			FolderPath := RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*)\\([^\\]*)\\([^\\]*)", "$1\$2")
-			Folder1Menu := QL_Menu StrReplace(StrReplace(RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*\\[^\\]*)\\([^\\]*)", "$1"), QL_Link_Dir), "\")
-			Folder2Menu := QL_Menu StrReplace(StrReplace(RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*)\\([^\\]*)\\([^\\]*)", "$1"), QL_Link_Dir), "\")
+			; Path to folder -> To Child Menu Name
+			; E.g. "Links$directory0_example$directory1_example"
+			Folder1Menu := QL_MenuName StrReplace(StrReplace(RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*\\[^\\]*)\\([^\\]*)", "$1"), QL_Link_Dir), "\", "$")
 
 			Linkname := StrReplace(A_LoopFileName, ".lnk")
 
-			if !this.oMenu.HasOwnProp(Folder1Menu) {
-				this.oMenu.%Folder1Menu% := Menu()
-			}
-
 			this.Command_Set(this.oMenu.%Folder1Menu%, Linkname, A_LoopFilePath)
-			;this.oMenu.%Folder1Menu%.Add(Linkname, OpenFavorite.Bind(Linkname, LinkTarget))
-			;this.oMenu.%Folder1Menu%.Add(Linkname, ((Functon1, Parameter, *) => (%Functon1%(Parameter))).Bind("Run", A_Loopfilefullpath))
-
 			this.Icon_Add(this.oMenu.%Folder1Menu%, Linkname, A_LoopFilePath) ; icon
-
-
-			if !this.oMenu.HasOwnProp(Folder2Menu) {
-				this.oMenu.%Folder2Menu% := Menu()
-			}
-
-			this.oMenu.%Folder2Menu%.Add(Folder1, this.oMenu.%Folder1Menu%) ; Create submenu
-
-
-			; TODO: FIXME: This loops to many times. Icon could be set only for first time. Same for submenu? To many requests for ini & checks for tmp non available folders.
-			;-> rewrite oMenu? parse separately folders and separately .ink files? Possibly it would be possible to make links from submenus
-
-			;icon for folder
-			if (setting.enable_menu_folder_icon = "true")
-			{
-				; set folder icon from Desktop.ini
-				this.Icon_Folder_Add(this.oMenu.%Folder2Menu%, Folder1, FolderPath)
-			}
-			else
-			{
-				; set default folder icon
-				this.oMenu.%Folder2Menu%.SetIcon(Folder1, A_Windir "\syswow64\SHELL32.dll", "5")
-			}
 
 		}
 
-		; Commands section of the menu
-		this.oMenu.%this.QL_Menu_Name%.Add() ; Adding a line separating items from Commands.
+		; COMMANDS SECTION OF THE MENU
+		this.oMenu.%this.QL_MenuName%.Add() ; Adding a line separating items from Commands.
 
 		; Edit Links - Comand for opening folder with Ink's.
-		this.Command_Set(this.oMenu.%this.QL_Menu_Name%, lang.edit_links, QL_Link_Dir)
-		; this.oMenu.%this.QL_Menu_Name%.SetIcon(lang.edit_links, A_Windir "\syswow64\SHELL32.dll", "5") ; optional icon for Edit Links ;
-
+		this.Command_Set(this.oMenu.%this.QL_MenuName%, lang.edit_links, QL_Link_Dir)
+		; this.oMenu.%this.QL_MenuName%.SetIcon(lang.edit_links, A_Windir "\System32\SHELL32.dll", "5") ; optional icon for Edit Links ;
 
 		; Reload Links - Command for recreating menu. Rescan Ink's, icons and folders.
 		if (setting.enable_command_reload_QL = "true")
 		{
-		this.oMenu.%this.QL_Menu_Name%.Add(lang.reload_links, this.Recreate.Bind(this))
+			this.oMenu.%this.QL_MenuName%.Add(lang.reload_links, this.Recreate.Bind(this))
 		}
 
+		; End of menu preparation
 		return this.oMenu
 	}
 
@@ -160,15 +200,15 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		if !LightTheme {
 			this.SetDarkMode()
 		}
-		this.oMenu.%this.QL_Menu_Name%.Show()
+		this.oMenu.%this.QL_MenuName%.Show()
 	}
 
 	; Re-create the menu and display it
 	Recreate(*) {
-		OutputDebug '`nRecreate called for new menu: "' QL_Menu_Name '".`n'
+		OutputDebug '`nRecreate called for menu: "' QL_Menu '".`n'
 		this.oMenu := {}
-		this.CreateMenu(QL_Menu_Name)
-		this.oMenu.%this.QL_Menu_Name%.Show()
+		this.CreateMenu(QL_Menu)
+		this.oMenu.%this.QL_MenuName%.Show()
 		return
 	}
 
