@@ -238,11 +238,21 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			File := LoopFileFullPath
 		}
 
-		;if Target Unavailable - Important for temporaly Unavalilable link targets.
+		;if Target Unavailable - Important for temporarily Unavalilable link targets.
 		if not FileExist(File) {
-			menuitem.SetIcon(submenu, A_Windir "\syswow64\SHELL32.dll", "67")
+			; If Is Path to Folder
+			if (RegExMatch(File, "^(.*[\\/])[^.\\/.]*$"))
+			{
+				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -146)
+				return
+			}
+			else
+			{
+				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -145)
 			return
+			}
 		}
+
 
 		;if Folder
 		if InStr(FileExist(File), "D") {
