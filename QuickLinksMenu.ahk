@@ -513,15 +513,9 @@ ConvertToAbsolutePath(relativePath, basePath) {
 	if (RegExMatch(relativePath, "^\w:\\") || SubStr(relativePath, 1, 2) == "\\")
 		return relativePath ; Path is already absolute
 	else
-		return basePath . "\" . relativePath ; ; Convert to absolute
+		return PathCombine(basePath, relativePath)
 }
 
-; Unused part of Code
-/*
-IsFolderPath(path) {
-	return (SubStr(path, -1) = "\" || SubStr(path, -1) = "/")
-}
-*/
 
 Run_explorer(path) {
 	OutputDebug "Called Function Run_Explorer with path: " path "`n"
@@ -624,6 +618,26 @@ GetActiveExplorerTab(hwnd := WinExist("A")) {
 		return w
 	}
 }
+
+
+PathCombine(abs, rel)
+; http://stackoverflow.com/questions/29783202/combine-absolute-path-with-a-relative-path-with-ahk/
+; The PathCombine function returns combination of absolute path with a relative path.
+{
+	dest := Buffer(2 * 260) ; MAX_PATH
+	DllCall("Shlwapi.dll\PathCombine", "Ptr", dest, "str", abs, "str", rel)
+	Return StrGet(dest)
+}
+
+
+GetFullPathName(path) {
+	;The GetFullPathName function returns the full path to the file based on the specified relative path. The root against which the relative path is interpreted depends on the current working directory in which the script or program is running.
+	cc := DllCall("GetFullPathNameW", "str", path, "uint", 0, "ptr", 0, "ptr", 0, "uint")
+	buf := Buffer(cc * 2)
+	DllCall("GetFullPathNameW", "str", path, "uint", cc, "ptr", buf, "ptr", 0, "uint")
+	return StrGet(buf)
+}
+
 
 ExpandEnvironmentStrings(&vInputString)
 {
