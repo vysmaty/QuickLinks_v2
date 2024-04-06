@@ -1,4 +1,4 @@
-; This code creates a menu based on a directory, so it is easy to change and manage without changing any code.
+﻿; This code creates a menu based on a directory, so it is easy to change and manage without changing any code.
 ; This code is an adaptation of QuickLinks.ahk, by Jack Dunning.
 ; http://www.computoredge.com/AutoHotkey/AutoHotkey_Quicklinks_Menu_App.html
 ; Updated 2021-11-24:
@@ -10,12 +10,13 @@
 ; - Moved to a class
 
 ; Objev - Menu je navigovatelné klávesnicí
+; Cílem je vizuálně jednoduché a nápomocné menu. Věci navíc musejí být redukovatelné.
 
 #Requires AutoHotkey v2
 #SingleInstance Force
 
 ; Read setings from \settings.ini
-OutputDebug "Retrived settings:`n"
+OutputDebug "`nRetrived settings:`n"
 section := IniRead(A_ScriptDir "\settings.ini", "settings")
 setting := {} ;Object for properies and items.
 Loop Parse, section, "`n", "`r"
@@ -30,13 +31,9 @@ Loop Parse, section, "`n", "`r"
 ; TODO: #15 Translations
 ; Read translations from \lang_en.ini
 lang := {} ;Object for properies and items.
-lang.edit_links := "Edit QuickLinks"
-lang.reload_links := "Reload QuickLinks"
+lang.edit_links := "Edit QuickLinks Menu"
+lang.reload_links := "Reload QuickLinks Menu"
 lang.tray_tip := "Press [Ctrl + Right Mouse Button] to show the menu"
-
-; DEBUG:
-; g_Paths := [] try to remove after testing
-; DEBUG:
 
 ; Global Variables
 g_window_id := 0
@@ -54,7 +51,7 @@ TrayTip(lang.tray_tip)
 ^RButton::
 ;CapsLock:: ; Example of adding another trigger.
 {
-	OutputDebug 'The menu was requested.`n'
+	OutputDebug '`nThe menu was requested.`n'
 	DisplayMenu
 	return
 } ;
@@ -249,15 +246,14 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			else
 			{
 				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -145)
-			return
+				return
 			}
 		}
 
 
 		;if Folder
 		if InStr(FileExist(File), "D") {
-			;region Icon from .ini REVIEW: Enhancement: Add icon for folders. FolderPainter.
-			;encapsulate TODO:
+			; Add icon for folders
 			this.Icon_Folder_Add(menuitem, submenu, File)
 			return
 		}
@@ -294,7 +290,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			case "jpg", "png":
 				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -236)
 			case "txt":
-				menuitem.SetIcon(submenu, A_Windir "\syswow64\shell32.dll", -235)
+				menuitem.SetIcon(submenu, A_Windir "\System32\shell32.dll", -235)
 
 			default:
 				; If icon is specified as "file - index" ; Untested. TODO: With REGISTRY FIXING.
@@ -320,7 +316,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			menuitem.SetIcon(submenu, AbsoluteIconPath, IconIndex)
 		}
 		else {
-			menuitem.SetIcon(submenu, A_Windir "\syswow64\SHELL32.dll", "5")
+			menuitem.SetIcon(submenu, A_Windir "\System32\SHELL32.dll", "5")
 		}
 	}
 
