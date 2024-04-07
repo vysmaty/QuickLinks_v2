@@ -34,6 +34,7 @@ lang := {} ;Object for properies and items.
 lang.edit_links := "Edit QuickLinks Menu"
 lang.reload_links := "Reload QuickLinks Menu"
 lang.tray_tip := "Press [Ctrl + Right Mouse Button] to show the menu"
+lang.current_windows := "Current Windows"
 
 ; Global Variables
 g_window_id := 0
@@ -87,6 +88,20 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 		; ROOT MENU
 		this.oMenu.%this.QL_MenuName% := Menu()
+
+		; OPTIONAL FEATURES
+		; Current Windows
+		if (setting.enable_current_windows = "true")
+		{
+			this.oMenu.CurrentWindows := Menu()
+			this.oMenu.%this.QL_MenuName%.Add(lang.current_windows, this.oMenu.CurrentWindows) ; Add submenu
+			this.oMenu.%this.QL_MenuName%.SetIcon(lang.current_windows, A_Windir "\System32\SHELL32.dll", -46) ; optional icon for Edit Links ;
+		}
+
+		if (setting.enable_current_windows = "true") ; OR ANOTHER FEATURE
+		{
+			this.oMenu.%this.QL_MenuName%.Add() ; Divider
+		}
 
 		; Loop through Folders & CREATE MENUS
 		OutputDebug "`nCreating Menus:`n"
@@ -197,7 +212,32 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		if !LightTheme {
 			this.SetDarkMode()
 		}
+		if (setting.enable_current_windows = "true")
+		{
+			this.oMenu.CurrentWindows.Delete
+			this.CurrentWindows()
+		}
 		this.oMenu.%this.QL_MenuName%.Show()
+
+	}
+
+	CurrentWindows() {
+		ExplArray := Explorer_Array()
+		if (ExplArray = 0)
+		{
+			return
+		}
+		; Potřebuji ten seznam seřadit od nejaktivnějšího po nejstarší. Tohle je ještě otázkou.
+		; Potřebuji vypsat x položek.
+		; Potřebuji aby položky měli omezený počet znaku.
+
+		ExplArray := ReverseArray(ExplArray)
+		for index, window in ExplArray
+		{
+			;ID := window[1]
+			path := window[2]
+			this.Command_Set(this.oMenu.CurrentWindows, path, path)
+		}
 	}
 
 	; Re-create the menu and display it
@@ -263,7 +303,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			return
 		}
 
-		;else -> By Extension 
+		;else -> By Extension
 		SplitPath File, , , &Extension
 
 		; Extension Exe
@@ -286,7 +326,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			case "txt":
 				menuitem.SetIcon(submenu, A_Windir "\System32\shell32.dll", -235)
 			default:
-				this.GetExtIcon(Extension,&IconFile,&IconIndex)
+				this.GetExtIcon(Extension, &IconFile, &IconIndex)
 				menuitem.SetIcon(submenu, IconFile, IconIndex)
 				return
 		}
@@ -306,7 +346,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 	}
 
 	; Function to get icons from registry
-	GetExtIcon(Ext,&IconFile,&IconIndex) {
+	GetExtIcon(Ext, &IconFile, &IconIndex) {
 		; Try pulling the ico from the registry. I'm in over my head. Is there no official dll library?
 		; https://superuser.com/questions/436939/where-is-the-default-program-associations-stored-in-the-registry
 		try {
@@ -610,6 +650,27 @@ Run_explorer(path) {
 		Run(path)
 }
 
+Explorer_Array() { ; TODO: Replace Explorer_List with this.
+	; Get ID + fullpath of all opened explorer windows:
+	If WinExist("ahk_class CabinetWClass") ; explorer
+	{
+		ExplArray := Array()
+		for window in ComObject("Shell.Application").Windows
+		{
+			try explorer_path := window.Document.Folder.Self.Path
+			;OutputDebug explorer_path '`n'
+			If (explorer_path = "")
+				continue
+			ID := window.HWND
+			ExplArray.Push([ID, explorer_path])
+		}
+		return ExplArray
+	}
+	else {
+		return 0
+	}
+}
+
 explorer_list() {
 	; Get ID + fullpath of all opened explorer windows:
 	If WinExist("ahk_class CabinetWClass") ; explorer
@@ -689,4 +750,15 @@ ExpandEnvironmentStrings(&vInputString)
 
 	; return success
 	Return True
+}
+
+
+ReverseArray(arr) {
+	;https://www.autohotkey.com/boards/viewtopic.php?p=297353#p297353
+	o := []
+	brr := arr.clone()
+	for i, k in arr.clone() {
+		o.InsertAt(i, brr.pop())
+	}
+	return o
 }
