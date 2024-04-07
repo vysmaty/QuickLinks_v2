@@ -43,7 +43,7 @@ g_process := ""
 
 ; Startup
 oMenu := QuickLinksMenu(QL_Menu := "Links")
-;oMenu := QuickLinksMenu(QL_Menu := ".\tests\base") ; Path to test files.
+;oMenu := QuickLinksMenu(QL_Menu := ".\tests\basic") ; Path to test files.
 
 TrayTip(lang.tray_tip)
 
@@ -156,7 +156,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 				continue
 
 			; Skip any file that matches:
-			if (A_LoopFileName = "Desktop.ini")
+			if (A_LoopFileName = "Desktop.ini" or A_LoopFileExt = "ico")
 				continue
 
 			; PARSE FILE PATH INTO VARIABLES
@@ -224,6 +224,12 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		IconFile := ""
 		IconIndex := ""
 
+		/* IconNumber (IconIndex)
+		Type: Integer
+		If omitted, it defaults to 1 (the first icon group). Otherwise, specify the number of the icon group to be used in the file. For example, MyMenu.SetIcon(MenuItemName, "Shell32.dll", 2) would use the default icon from the second icon group. If negative, its absolute value is assumed to be the resource ID of an icon within an executable file.
+		*/
+
+		;if Defined in .Ink
 		If InStr(LoopFileFullPath, ".lnk") {
 			FileGetShortcut(LoopFileFullPath, &File, , , , &OutIcon, &OutIconNum)
 			if (OutIcon != "") {
@@ -250,7 +256,6 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			}
 		}
 
-
 		;if Folder
 		if InStr(FileExist(File), "D") {
 			; Add icon for folders
@@ -258,10 +263,10 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			return
 		}
 
+		;else -> By Extension 
 		SplitPath File, , , &Extension
 
-		Icon_nr := 0
-
+		; Extension Exe
 		If (Extension = "exe") {
 			try {
 				menuitem.SetIcon(submenu, file, "1")
@@ -269,40 +274,20 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			return
 		}
 
-		IconFile := this.getExtIcon(Extension)
-
-		; Manualy Set Icons for Selected Extensions
-
-		; TODO: Fix Registry Search and Comment Out Sections
-		; TODO: Add Fallback for non existent files. And Log Error Message.
-		; TODO: Check Folder Icon Set
-
-		/* IconNumber
-		Type: Integer
-		If omitted, it defaults to 1 (the first icon group). Otherwise, specify the number of the icon group to be used in the file. For example, MyMenu.SetIcon(MenuItemName, "Shell32.dll", 2) would use the default icon from the second icon group. If negative, its absolute value is assumed to be the resource ID of an icon within an executable file.
-		*/
-
+		; Other Extensions
 		switch (Extension) {
+			; Manualy Set Icons for Selected Extensions
 			case "url":
 				menuitem.SetIcon(submenu, A_Windir "\system32\Imageres.dll", -1010)
 			case "ahk":
 				menuitem.SetIcon(submenu, "autohotkey.exe", 2)
-			case "jpg", "png":
+			case "jpg", "png", "gif", "bmp":
 				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -236)
 			case "txt":
 				menuitem.SetIcon(submenu, A_Windir "\System32\shell32.dll", -235)
-
 			default:
-				; If icon is specified as "file - index" ; Untested. TODO: With REGISTRY FIXING.
-				if (InStr(IconFile, " - ")) {
-					try {
-						RegExMatch(IconFile, "(.*) - (\d*)", &IconFile)
-						menuitem.SetIcon(submenu, IconFile[1], IconFile[2])
-					}
-					catch {
-						MsgBox(IconFile[1] "`n" IconFile[2] "`nNext: " . Extension)
-					}
-				}
+				this.GetExtIcon(Extension,&IconFile,&IconIndex)
+				menuitem.SetIcon(submenu, IconFile, IconIndex)
 				return
 		}
 	}
@@ -320,23 +305,61 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		}
 	}
 
-	; to FIXME: unable to read .txt file Why? Improve metod and - try catch -> OutputDebug message.
-	getExtIcon(Ext) {
+	; Function to get icons from registry
+	GetExtIcon(Ext,&IconFile,&IconIndex) {
+		; Try pulling the ico from the registry. I'm in over my head. Is there no official dll library?
+		; https://superuser.com/questions/436939/where-is-the-default-program-associations-stored-in-the-registry
 		try {
-			from := RegRead("HKEY_CLASSES_ROOT\." Ext)
-			DefaultIcon := RegRead("HKEY_CLASSES_ROOT\" from "\DefaultIcon")
-			; TODO: Use for path env ExpandEnvironmentStrings or ConvertToAbsolutePath
+			try { ; Associations from Windows Explorer
+				ProgId1 := RegRead("HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\." Ext "\UserChoice", "ProgId")
+			}
+			try { ; Base Associations From Root
+				ProgId2 := RegRead("HKEY_CLASSES_ROOT\." Ext)
+			}
+
+			; Icons from ProgID
+			try {
+				DefaultIcon := RegRead("HKEY_CLASSES_ROOT\" ProgId1 "\DefaultIcon")
+				If (RegExMatch(DefaultIcon, "^@")) ; REVIEW: If you now how to handle URI (Uniform Resource Identifier) and png images sets feel free to fill in.
+				{
+					throw
+				}
+			}
+			catch {
+				try {
+					DefaultIcon := RegRead("HKEY_CLASSES_ROOT\" ProgId2 "\DefaultIcon")
+					If (RegExMatch(DefaultIcon, "^@")) ; REVIEW: If you now how to handle URI (Uniform Resource Identifier) and png images sets feel free to fill in.
+					{
+						throw
+					}
+				}
+				catch
+				{
+					throw ; Throw to FallBackIcon
+				}
+			}
 			DefaultIcon := StrReplace(DefaultIcon, '"')
-			DefaultIcon := StrReplace(DefaultIcon, "%SystemRoot%", A_WinDir)
-			DefaultIcon := StrReplace(DefaultIcon, "%ProgramFiles%", A_ProgramFiles)
-			DefaultIcon := StrReplace(DefaultIcon, "%windir%", A_WinDir)
 
+			; Skip any file that matches:
+			if (DefaultIcon = "%1") {
+				throw
+			}
 			I := StrSplit(DefaultIcon, ",")
+			IconFile := I[1]
+			IconIndex := this.IndexOfIconResource(ExpandEnvironmentStrings(&IconFile), RegExReplace(I[2], "[^\d]+"))
+			return
+		}
 
-			Return I[1] " - " this.IndexOfIconResource(I[1], RegExReplace(I[2], "[^\d]+"))
+		; FallBackIcon
+		; If you can't find it in all the mess and complexity. Then use:
+		catch {
+			; Set Fallback Icon TODO: A taky Catch když Defauilt Icon selže.
+			IconFile := A_Windir "\System32\SHELL32.dll"
+			IconIndex := -16769
+			OutputDebug "Error. The path for the '" Ext "' icon was not retrieved from the registry. It will by used default.`n"
+			return
 		}
 	}
-
 	IndexOfIconResource(Filename, ID) {
 		; If the DLL isn't already loaded, load it as a data file.
 		If !DllCall("GetModuleHandle", "Str", Filename, "UPtr")
@@ -507,6 +530,10 @@ ReadDesktopIni(IniFile, &IconFile, &IconIndex) {
 			IconResource := StrSplit(IniRead(IniFile, ".ShellClassInfo", "IconResource"), ",")
 			IconFile := IconResource[1]
 			IconIndex := IconResource[2]
+		}
+		catch {
+			IconFile := A_Windir "\System32\SHELL32.dll"
+			IconIndex := "5"
 		}
 	}
 }
