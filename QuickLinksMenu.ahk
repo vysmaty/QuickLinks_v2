@@ -20,6 +20,46 @@
 #Include .\dependency\ini_v2.ahk ; Class for parsing .ini's from TopHatCat
 
 
+;{-----------------------------------------------
+; MARK: Set HOTKEYS
+;{-----------------------------------------------
+
+; Set YOUR HOTKEY for Quick Links Menu
+; Hotkey for Showing menu:
+SimpleHotkey := ["^RButton"] ; <-- SET ME ; Eg. ( Ctrl + Right Mouse Button)
+; Hotkey for Showing Extended menu:
+ExtendedModifierKey := ["+"] ; <-- SET ME ; Eg. ( Shift ) == Eg. (Ctrl + Shift + Right Mouse Button)
+
+;{-----------------------------------------------
+
+
+; Assigning all hotkeys to functions
+for htky in SimpleHotkey
+{
+	Hotkey(htky, DisplaySimpleMenu.Bind())
+	for mkey in ExtendedModifierKey
+		htky := mkey htky
+	Hotkey(htky, DisplayExtendedMenu.Bind())
+}
+
+; Hotkeys functions:
+;^RButton::
+DisplaySimpleMenu(*)
+{
+	OutputDebug '`nThe menu was requested.`n'
+	DisplayMenu(false)
+	return
+}
+
+;^+RButton::
+DisplayExtendedMenu(*)
+{
+	OutputDebug '`nThe extended menu was requested.`n'
+	DisplayMenu(true)
+	return
+}
+
+
 ; MARK: Settings from .ini
 ;{-----------------------------------------------
 
@@ -45,7 +85,7 @@ lang_en := "
 	;https://en.wikipedia.org/wiki/INI_file
 	;Save With UTF-8 with BOM
 	[basics]
-	tray_tip = "Press [Ctrl + Right Mouse Button] to show the menu"
+	tray_tip = "Press [] to show the menu"
 	[commands]
 	edit_links = "Edit QuickLinks Menu"
 	reload_links = "Reload QuickLinks Menu"
@@ -74,23 +114,21 @@ else {
 
 ; Parse optional translation:
 if (HasProp(ini.translating, "translation_lang"))
+{
+	Filename := A_ScriptDir "\lang_" ini.translating.translation_lang ".ini"
+	if (FileExist(Filename))
 	{
-		Filename := A_ScriptDir "\lang_" ini.translating.translation_lang ".ini"
-		if (FileExist(Filename))
-		{
-			translation := IniConf.parse(Filename)
-			; Use translated lines:
-			For section in translation.OwnProps()
-				For property, value in translation.%section%.OwnProps()
-					lang.%section%.%property% := value
-		}
-		else {
-			MsgBox("Your set translation file was not found!")
-		}
+		translation := IniConf.parse(Filename)
+		; Use translated lines:
+		For section in translation.OwnProps()
+			For property, value in translation.%section%.OwnProps()
+				lang.%section%.%property% := value
 	}
+	else {
+		MsgBox("Your set translation file was not found!")
+	}
+}
 
-
-; TODO: #15 Translations
 
 ; Global Variables
 g_window_id := 0
@@ -102,16 +140,7 @@ g_process := ""
 oMenu := QuickLinksMenu(QL_Menu := "Links")
 ;oMenu := QuickLinksMenu(QL_Menu := ".\tests\basic") ; Path to test files.
 
-TrayTip(lang.basics.tray_tip)
-
-; Hotkeys
-^RButton::
-;CapsLock:: ; Example of adding another trigger.
-{
-	OutputDebug '`nThe menu was requested.`n'
-	DisplayMenu
-	return
-} ;
+TrayTip(StrReplace(lang.basics.tray_tip, "[]", SimpleHotkey[1]))
 
 
 ; TODO: #13 Make QuickLinksMenu more independent
@@ -123,23 +152,23 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		this.CreateMenu(QL_Menu)
 	}
 
-	; CREATE MENU
+	; CREATE MENU - prepare base of menus
 	CreateMenu(QL_Menu) {
 
 		; If it's not path, place it relative to the script.
 		If !InStr(QL_Menu, "\") {
-			QL_Link_Dir := A_ScriptDir "\" QL_Menu
+			this.QL_Link_Dir := A_ScriptDir "\" QL_Menu
 		}
 		else {
-			QL_Link_Dir := ConvertToAbsolutePath(QL_Menu, A_ScriptDir)
+			this.QL_Link_Dir := ConvertToAbsolutePath(QL_Menu, A_ScriptDir)
 		}
 
-		SplitPath(QL_Link_Dir, &QL_MenuName)
+		SplitPath(this.QL_Link_Dir, &QL_MenuName)
 
 		this.QL_MenuName := QL_MenuName
 
-		If !FileExist(QL_Link_Dir) {
-			DirCreate(QL_Link_Dir)
+		If !FileExist(this.QL_Link_Dir) {
+			DirCreate(this.QL_Link_Dir)
 		}
 
 		; ROOT MENU
@@ -161,7 +190,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 		; Loop through Folders & CREATE MENUS
 		OutputDebug "`nCreating Menus:`n"
-		Loop Files, QL_Link_Dir "\*", "DR" ; Get Folders & Recurse
+		Loop Files, this.QL_Link_Dir "\*", "DR" ; Get Folders & Recurse
 		{
 			;Skip any file that is H, or S (System).
 			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "S")
@@ -186,11 +215,11 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 			; Path to Folder -> To (Child) Menu Name
 			; E.g. "Links$directory0_example$directory1_example"
-			Folder1Menu := QL_MenuName StrReplace(StrReplace(FolderPath, QL_Link_Dir), "\", "$")
+			Folder1Menu := QL_MenuName StrReplace(StrReplace(FolderPath, this.QL_Link_Dir), "\", "$")
 
 			; Path to Parent Folder -> To Parent Menu Name
 			; E.g. "Links$directory0_example"
-			Folder0Menu := QL_MenuName StrReplace(StrReplace(ParentFolderPath, QL_Link_Dir), "\", "$")
+			Folder0Menu := QL_MenuName StrReplace(StrReplace(ParentFolderPath, this.QL_Link_Dir), "\", "$")
 
 			; CHILD MENU
 			if !this.oMenu.HasOwnProp(Folder1Menu) {
@@ -220,7 +249,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 		; Loop through Files & ADD MENU ITEMS
 		OutputDebug "`nAdding menu items:`n"
-		Loop Files, QL_Link_Dir "\*.*", "FR" ; Get Files & Recurse
+		Loop Files, this.QL_Link_Dir "\*.*", "FR" ; Get Files & Recurse
 		{
 			;Skip any file that is H, R, or S (System).
 			if InStr(A_LoopFileAttrib, "H") or InStr(A_LoopFileAttrib, "R") or InStr(A_LoopFileAttrib, "S")
@@ -235,7 +264,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 			; Path to folder -> To Child Menu Name
 			; E.g. "Links$directory0_example$directory1_example"
-			Folder1Menu := QL_MenuName StrReplace(StrReplace(RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*\\[^\\]*)\\([^\\]*)", "$1"), QL_Link_Dir), "\", "$")
+			Folder1Menu := QL_MenuName StrReplace(StrReplace(RegExReplace(A_Loopfilefullpath, "(.*\\[^\\]*\\[^\\]*)\\([^\\]*)", "$1"), this.QL_Link_Dir), "\", "$")
 
 			Linkname := StrReplace(A_LoopFileName, ".lnk")
 
@@ -244,36 +273,61 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 		}
 
-		; COMMANDS SECTION OF THE MENU
-		this.oMenu.%this.QL_MenuName%.Add() ; Adding a line separating items from Commands.
-
-		; Edit Links - Comand for opening folder with Ink's.
-		this.Command_Set(this.oMenu.%this.QL_MenuName%, lang.commands.edit_links, QL_Link_Dir)
-		; this.oMenu.%this.QL_MenuName%.SetIcon(lang.commands.edit_links, A_Windir "\System32\SHELL32.dll", "5") ; optional icon for Edit Links ;
-
-		; Reload Links - Command for recreating menu. Rescan Ink's, icons and folders.
-		if (ini.settings.enable_command_reload_QL = "true")
-		{
-			this.oMenu.%this.QL_MenuName%.Add(lang.commands.reload_links, this.Recreate.Bind(this))
-		}
-
 		; End of menu preparation
 		return this.oMenu
 	}
 
 	; Show Menu
-	Show() {
+	Show(extended) {
+
 		;Refresh DarkMode state when menu Called.
 		LightTheme := RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme")
 		if !LightTheme {
 			this.SetDarkMode()
 		}
+
+		; Recreate Current Windows Submenu
 		if (ini.settings.enable_current_windows = "true")
 		{
 			this.oMenu.CurrentWindows.Delete
 			this.CurrentWindows()
 		}
-		this.oMenu.%this.QL_MenuName%.Show()
+
+		; Show Extended Menu
+		if (extended) {
+			; EXTENDED COMMANDS SECTION OF THE MENU
+
+			; Add separator
+			this.oMenu.%this.QL_MenuName%.Add() ; Adding a line separating items from Commands.
+
+			; Add Extended commands:
+			; Edit Links - comand for opening folder with Ink's.
+			this.Command_Set(this.oMenu.%this.QL_MenuName%, lang.commands.edit_links, this.QL_Link_Dir)
+			; this.oMenu.%this.QL_MenuName%.SetIcon(lang.commands.edit_links, A_Windir "\System32\SHELL32.dll", "5") ; optional icon for Edit Links ;
+
+			; Reload Links - command for recreating menu. Rescan Ink's, icons and folders.
+			if (ini.settings.enable_command_reload_QL = "true")
+			{
+				this.oMenu.%this.QL_MenuName%.Add(lang.commands.reload_links, this.Recreate.Bind(this))
+			}
+
+			; Show
+			this.oMenu.%this.QL_MenuName%.Show()
+
+			; & Cleanup:
+			; Delete Extended Items
+			this.oMenu.%this.QL_MenuName%.Delete(lang.commands.edit_links)
+			this.oMenu.%this.QL_MenuName%.Delete(lang.commands.reload_links)
+
+			; Retrieve the number of items in a menu. And delete last extended item - separator.
+			item_count := DllCall("GetMenuItemCount", "ptr", this.oMenu.%this.QL_MenuName%.Handle)
+			this.oMenu.%this.QL_MenuName%.Delete(item_count "&")
+		}
+
+		; Show Simple Menu
+		else {
+			this.oMenu.%this.QL_MenuName%.Show()
+		}
 
 	}
 
@@ -494,7 +548,7 @@ IndexOfIconResource_EnumIconResources(hModule, lpszType, lpszName, lParam) {
 ; BASED ON: Easy Access to Favorite Folders (based on the v1 script by Savage)
 
 ;----Display the menu
-DisplayMenu(*)
+DisplayMenu(extended, *)
 {
 	; These first few variables are set here and used by OpenFavorite:
 	try global g_window_id := WinGetID("A")
@@ -534,7 +588,7 @@ DisplayMenu(*)
 
 	}
 	; Otherwise, the menu should be presented for this type of window:
-	oMenu.Show()
+	oMenu.Show(extended)
 }
 
 ;----Open the selected favorite
