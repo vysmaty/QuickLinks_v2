@@ -12,29 +12,85 @@
 ; Objev - Menu je navigovatelné klávesnicí
 ; Cílem je vizuálně jednoduché a nápomocné menu. Věci navíc musejí být redukovatelné.
 
-#Requires AutoHotkey v2
+#Requires AutoHotkey v2.0
 #SingleInstance Force
 
-; Read setings from \settings.ini
-OutputDebug "`nRetrived settings:`n"
-section := IniRead(A_ScriptDir "\settings.ini", "settings")
-setting := {} ;Object for properies and items.
-Loop Parse, section, "`n", "`r"
-{
-	pos := InStr(a_loopField, "=", , 1) - 1
-	ini_key := SubStr(a_loopField, 1, pos)
-	ini_value := SubStr(a_loopField, pos + 2)
-	setting.%ini_key% := ini_value
-	OutputDebug ini_key "=" setting.%ini_key% "`n"
+; MARK: Depencencies
+;{-----------------------------------------------
+#Include .\dependency\ini_v2.ahk ; Class for parsing .ini's from TopHatCat
+
+
+; MARK: Settings from .ini
+;{-----------------------------------------------
+
+; Parsing settings.ini
+ini := IniConf.parse(A_ScriptDir . "\settings.ini")
+; Ini object is structured: ini.section.property
+OutputDebug "`nRetrived settings from .ini:`n"
+For property, value in ini.settings.OwnProps()
+	OutputDebug property "=" value "`n"
+
+; Example for Setting values to ini:
+;IniWrite "value_example", A_ScriptDir . "\settings.ini", "settings", "enable_item_example"
+
+
+; MARK: Translation
+;{-----------------------------------------------
+; If translation language is set in settings, it will look for lang_XX.ini
+; If lang_en.ini wanted in settings, it will be created.
+
+; Default lang_en translation:
+lang_en := "
+(
+	;https://en.wikipedia.org/wiki/INI_file
+	;Save With UTF-8 with BOM
+	[basics]
+	tray_tip = "Press [Ctrl + Right Mouse Button] to show the menu"
+	[commands]
+	edit_links = "Edit QuickLinks Menu"
+	reload_links = "Reload QuickLinks Menu"
+	[features]
+	current_windows = "Current Windows"
+)"
+
+; Parse lang_en translation:
+Filename := A_ScriptDir "\lang_en.ini"
+if (!FileExist(Filename)) {
+	; If wanted, create lang_en.ini file and parse it.
+	if (ini.translating.write_lang_en_ini = "true")
+	{
+		FileAppend(lang_en, FileName, "`n UTF-8")
+		lang := IniConf.parse(Filename)
+	}
+	; Else parse lang_en directly from script
+	else {
+		lang := IniConf.parse(lang_en)
+	}
+}
+else {
+	; If lang_en.ini exist parse it.
+	lang := IniConf.parse(Filename)
 }
 
+; Parse optional translation:
+if (HasProp(ini.translating, "translation_lang"))
+	{
+		Filename := A_ScriptDir "\lang_" ini.translating.translation_lang ".ini"
+		if (FileExist(Filename))
+		{
+			translation := IniConf.parse(Filename)
+			; Use translated lines:
+			For section in translation.OwnProps()
+				For property, value in translation.%section%.OwnProps()
+					lang.%section%.%property% := value
+		}
+		else {
+			MsgBox("Your set translation file was not found!")
+		}
+	}
+
+
 ; TODO: #15 Translations
-; Read translations from \lang_en.ini
-lang := {} ;Object for properies and items.
-lang.edit_links := "Edit QuickLinks Menu"
-lang.reload_links := "Reload QuickLinks Menu"
-lang.tray_tip := "Press [Ctrl + Right Mouse Button] to show the menu"
-lang.current_windows := "Current Windows"
 
 ; Global Variables
 g_window_id := 0
@@ -46,7 +102,7 @@ g_process := ""
 oMenu := QuickLinksMenu(QL_Menu := "Links")
 ;oMenu := QuickLinksMenu(QL_Menu := ".\tests\basic") ; Path to test files.
 
-TrayTip(lang.tray_tip)
+TrayTip(lang.basics.tray_tip)
 
 ; Hotkeys
 ^RButton::
@@ -91,14 +147,14 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 		; OPTIONAL FEATURES
 		; Current Windows
-		if (setting.enable_current_windows = "true")
+		if (ini.settings.enable_current_windows = "true")
 		{
 			this.oMenu.CurrentWindows := Menu()
-			this.oMenu.%this.QL_MenuName%.Add(lang.current_windows, this.oMenu.CurrentWindows) ; Add submenu
-			this.oMenu.%this.QL_MenuName%.SetIcon(lang.current_windows, A_Windir "\System32\SHELL32.dll", -46) ; optional icon for Edit Links ;
+			this.oMenu.%this.QL_MenuName%.Add(lang.features.current_windows, this.oMenu.CurrentWindows) ; Add submenu
+			this.oMenu.%this.QL_MenuName%.SetIcon(lang.features.current_windows, A_Windir "\System32\SHELL32.dll", -46) ; optional icon for Edit Links ;
 		}
 
-		if (setting.enable_current_windows = "true") ; OR ANOTHER FEATURE
+		if (ini.settings.enable_current_windows = "true") ; OR ANOTHER FEATURE
 		{
 			this.oMenu.%this.QL_MenuName%.Add() ; Divider
 		}
@@ -150,7 +206,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			this.oMenu.%Folder0Menu%.Add(FolderName, this.oMenu.%Folder1Menu%) ; Create submenu
 
 			; Set Icon to Child Menu
-			if (setting.enable_menu_folder_icon = "true")
+			if (ini.settings.enable_menu_folder_icon = "true")
 			{
 				; set folder icon from Desktop.ini
 				this.Icon_Folder_Add(this.oMenu.%Folder0Menu%, FolderName, FolderPath)
@@ -192,13 +248,13 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		this.oMenu.%this.QL_MenuName%.Add() ; Adding a line separating items from Commands.
 
 		; Edit Links - Comand for opening folder with Ink's.
-		this.Command_Set(this.oMenu.%this.QL_MenuName%, lang.edit_links, QL_Link_Dir)
-		; this.oMenu.%this.QL_MenuName%.SetIcon(lang.edit_links, A_Windir "\System32\SHELL32.dll", "5") ; optional icon for Edit Links ;
+		this.Command_Set(this.oMenu.%this.QL_MenuName%, lang.commands.edit_links, QL_Link_Dir)
+		; this.oMenu.%this.QL_MenuName%.SetIcon(lang.commands.edit_links, A_Windir "\System32\SHELL32.dll", "5") ; optional icon for Edit Links ;
 
 		; Reload Links - Command for recreating menu. Rescan Ink's, icons and folders.
-		if (setting.enable_command_reload_QL = "true")
+		if (ini.settings.enable_command_reload_QL = "true")
 		{
-			this.oMenu.%this.QL_MenuName%.Add(lang.reload_links, this.Recreate.Bind(this))
+			this.oMenu.%this.QL_MenuName%.Add(lang.commands.reload_links, this.Recreate.Bind(this))
 		}
 
 		; End of menu preparation
@@ -212,7 +268,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		if !LightTheme {
 			this.SetDarkMode()
 		}
-		if (setting.enable_current_windows = "true")
+		if (ini.settings.enable_current_windows = "true")
 		{
 			this.oMenu.CurrentWindows.Delete
 			this.CurrentWindows()
@@ -447,7 +503,7 @@ DisplayMenu(*)
 	try global g_process := WinGetProcessName(g_window_id)
 
 	; Set exceptions or set exclusivity
-	if setting.always_show_menu = "false" ; The menu should be shown only if application
+	if ini.settings.always_show_menu = "false" ; The menu should be shown only if application
 	{
 		;; Exceptions
 		;; If Application Is
@@ -546,7 +602,7 @@ OpenFavorite(ItemName, LinkTargetPath, LinkPath, *)
 	; Yes. It is. ;)
 
 	; Open File/Folder/Link
-	if (setting.enable_find_explorer = "true")
+	if (ini.settings.enable_find_explorer = "true")
 	{
 		; Try to find an existing Windows Explorer window with the same path before opening a new one.
 		Run_explorer(path)
@@ -613,7 +669,7 @@ Run_explorer(path) {
 
 
 				; Try to find and Activate Tab
-				if (setting.enable_find_explorer_tab = "true")
+				if (ini.settings.enable_find_explorer_tab = "true")
 				{
 					; If Windows 11 and later
 					if VerCompare(A_OSVersion, "10.0.22000") >= 0
