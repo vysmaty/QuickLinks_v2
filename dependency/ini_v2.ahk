@@ -117,6 +117,25 @@ class IniConf
 				}
 				else
 				{
+					; Remove whitespace from beggining of string
+					split_keyval[2] := LTrim(split_keyval[2])
+
+					; Optional remove trailing whitespace
+					if (!IniConf.allow_trailing_whitespace) {
+						split_keyval[2] := RTrim(split_keyval[2])
+					}
+
+					; Optional remove quotation marks
+					if (IniConf.remove_quotation_marks)
+					{
+						; Remove quotation marks if begins with mark
+						if (SubStr(split_keyval[2], 1, 1) == "`"")
+						{
+							split_keyval[2] := RTrim(split_keyval[2])
+							split_keyval[2] := Trim(split_keyval[2], "`"")
+						}
+					}
+
 					switch (split_keyval[2])
 					{
 						case "true", "yes":
@@ -152,25 +171,6 @@ class IniConf
 									}
 								}
 							}
-					}
-
-					; Remove whitespace from beggining of string
-					split_keyval[2] := LTrim(split_keyval[2])
-
-					; Optional remove trailing whitespace
-					if (!IniConf.allow_trailing_whitespace) {
-						split_keyval[2] := RTrim(split_keyval[2])
-					}
-
-					; Optional remove quotation marks
-					if (IniConf.remove_quotation_marks)
-					{
-						; Remove quotation marks if begins with mark
-						if (SubStr(split_keyval[2], 1, 1) == "`"")
-						{
-							split_keyval[2] := RTrim(split_keyval[2])
-							split_keyval[2] := Trim(split_keyval[2], "`"")
-						}
 					}
 
 					result.%last_section%.%Trim(split_keyval[1])% := split_keyval[2]

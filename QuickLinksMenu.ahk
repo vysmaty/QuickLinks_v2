@@ -91,25 +91,28 @@ lang_en := "
 	reload_links = "Reload QuickLinks Menu"
 	[features]
 	current_windows = "Current Windows"
+	recent_files = "Recent Files"
+	recent_folders = "Recent Folders"
 )"
 
 ; Parse lang_en translation:
 Filename := A_ScriptDir "\lang_en.ini"
 if (!FileExist(Filename)) {
 	; If wanted, create lang_en.ini file and parse it.
-	if (ini.translating.write_lang_en_ini = "true")
+	if (ini.translating.write_lang_en_ini)
 	{
 		FileAppend(lang_en, FileName, "`n UTF-8")
 		lang := IniConf.parse(Filename)
 	}
-	; Else parse lang_en directly from script
-	else {
-		lang := IniConf.parse(lang_en)
-	}
 }
-else {
+if (!HasProp(ini.translating, "translation_lang") AND FileExist(Filename))
+{
 	; If lang_en.ini exist parse it.
 	lang := IniConf.parse(Filename)
+}
+; Else parse lang_en directly from script
+else {
+	lang := IniConf.parse(lang_en)
 }
 
 ; Parse optional translation:
@@ -176,14 +179,30 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 
 		; OPTIONAL FEATURES
 		; Current Windows
-		if (ini.settings.enable_current_windows = "true")
+		if (ini.settings.enable_current_windows)
 		{
 			this.oMenu.CurrentWindows := Menu()
 			this.oMenu.%this.QL_MenuName%.Add(lang.features.current_windows, this.oMenu.CurrentWindows) ; Add submenu
 			this.oMenu.%this.QL_MenuName%.SetIcon(lang.features.current_windows, A_Windir "\System32\SHELL32.dll", -46) ; optional icon for Edit Links ;
 		}
 
-		if (ini.settings.enable_current_windows = "true") ; OR ANOTHER FEATURE
+		; Recent Folders
+		if (ini.settings.enable_recent_folders)
+		{
+			this.oMenu.RecentFolders := Menu()
+			this.oMenu.%this.QL_MenuName%.Add(lang.features.recent_folders, this.oMenu.RecentFolders) ; Add submenu
+			this.oMenu.%this.QL_MenuName%.SetIcon(lang.features.recent_folders, A_Windir "\System32\SHELL32.dll", -37219) ; optional icon for Edit Links ;
+		}
+
+		; Recent Files
+		if (ini.settings.enable_recent_files)
+		{
+			this.oMenu.RecentFiles := Menu()
+			this.oMenu.%this.QL_MenuName%.Add(lang.features.recent_files, this.oMenu.RecentFiles) ; Add submenu
+			this.oMenu.%this.QL_MenuName%.SetIcon(lang.features.recent_files, A_Windir "\System32\SHELL32.dll", -327) ; optional icon for Edit Links ;
+		}
+
+		if (ini.settings.enable_current_windows) ; OR ANOTHER FEATURE
 		{
 			this.oMenu.%this.QL_MenuName%.Add() ; Divider
 		}
@@ -235,7 +254,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			this.oMenu.%Folder0Menu%.Add(FolderName, this.oMenu.%Folder1Menu%) ; Create submenu
 
 			; Set Icon to Child Menu
-			if (ini.settings.enable_menu_folder_icon = "true")
+			if (ini.settings.enable_menu_folder_icon)
 			{
 				; set folder icon from Desktop.ini
 				this.Icon_Folder_Add(this.oMenu.%Folder0Menu%, FolderName, FolderPath)
@@ -287,10 +306,24 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		}
 
 		; Recreate Current Windows Submenu
-		if (ini.settings.enable_current_windows = "true")
+		if (ini.settings.enable_current_windows)
 		{
 			this.oMenu.CurrentWindows.Delete
 			this.CurrentWindows()
+		}
+
+		; Recreate Recent File Submenu
+		if (ini.settings.enable_recent_files OR ini.settings.enable_recent_folders)
+		{
+			if (ini.settings.enable_recent_folders)
+			{
+				this.oMenu.RecentFolders.Delete
+			}
+			if (ini.settings.enable_recent_files)
+			{
+				this.oMenu.RecentFiles.Delete
+			}
+			this.RecentFiles()
 		}
 
 		; Show Extended Menu
@@ -306,7 +339,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			; this.oMenu.%this.QL_MenuName%.SetIcon(lang.commands.edit_links, A_Windir "\System32\SHELL32.dll", "5") ; optional icon for Edit Links ;
 
 			; Reload Links - command for recreating menu. Rescan Ink's, icons and folders.
-			if (ini.settings.enable_command_reload_QL = "true")
+			if (ini.settings.enable_command_reload_QL)
 			{
 				this.oMenu.%this.QL_MenuName%.Add(lang.commands.reload_links, this.Recreate.Bind(this))
 			}
@@ -347,6 +380,94 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			;ID := window[1]
 			path := window[2]
 			this.Command_Set(this.oMenu.CurrentWindows, path, path)
+		}
+	}
+
+	; MARK: Recent Files/Folders
+	RecentFiles()
+	{
+		RecentFolderLimit := ini.settings.recent_folders_limit
+		RecentFileLimit := ini.settings.recent_files_limit
+
+		RecentLimit := RecentFolderLimit + RecentFileLimit
+
+		RecentFilesFolder := "C:\Users\" A_UserName "\AppData\Roaming\Microsoft\Windows\Recent"
+
+		FileList := ""
+		Loop Files, RecentFilesFolder "\*.*", "F" ; Include Files
+			FileList .= A_LoopFileTimeModified "`t" A_LoopFilePath "`n"
+		FileList := Sort(FileList, "R")  ; Sort by date - reverse.
+
+		iterationCount := 0
+		iterationFolderCount := 0
+		iterationFileCount := 0
+
+		Loop Parse, FileList, "`n"
+		{
+			if (iterationCount >= RecentLimit)
+			{
+				break
+			}
+
+			if A_LoopField = "" ; Omit the last linefeed (blank item) at the end of the list.
+				continue
+
+			FileItem := StrSplit(A_LoopField, A_Tab) ; Split into parts at the tab char
+
+			FileGetShortcut(FileItem[2], &LinkTargetPath)
+			if (LinkTargetPath = "") ; For Internet targets
+			{
+				continue
+			}
+			if (RegExMatch(LinkTargetPath, "^(.*[\\/])[^.\\/.]*$"))
+			{
+				; Recent folders
+				if (iterationFolderCount >= RecentFolderLimit)
+				{
+					continue
+				}
+				if (ini.settings.enable_recent_folders) {
+					iterationFolderCount++
+					SplitPath(LinkTargetPath, &OutFileName)
+					this.Command_Set(this.oMenu.RecentFolders, OutFileName, LinkTargetPath)
+					if (ini.settings.enable_recent_folder_icons)
+					{
+						this.Icon_Add(this.oMenu.RecentFolders, OutFileName, LinkTargetPath) ; icon for extension
+					}
+					else {
+						this.oMenu.RecentFolders.SetIcon(OutFileName, A_Windir "\System32\SHELL32.dll", 5) ; default icon for Folders
+					}
+
+				}
+				else {
+					iterationFolderCount := RecentFolderLimit
+					continue
+				}
+			}
+			else {
+				; Recent files
+				if (iterationFileCount >= RecentFileLimit)
+				{
+					continue
+				}
+				if (ini.settings.enable_recent_files) {
+					iterationFileCount++
+					SplitPath(LinkTargetPath, &OutFileName)
+					this.Command_Set(this.oMenu.RecentFiles, OutFileName, LinkTargetPath)
+					if (ini.settings.enable_recent_file_icons)
+					{
+						this.Icon_Add(this.oMenu.RecentFiles, OutFileName, LinkTargetPath) ; icon for extension
+					}
+					else {
+						this.oMenu.RecentFiles.SetIcon(OutFileName, A_Windir "\System32\SHELL32.dll", 0) ; default icon for Files
+					}
+				}
+				else {
+					iterationFileCount := RecentFileLimit
+					continue
+				}
+			}
+			iterationCount := iterationFolderCount + iterationFileCount
 		}
 	}
 
@@ -392,7 +513,8 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		}
 
 		;if Target Unavailable - Important for temporarily Unavalilable link targets.
-		if not FileExist(File) {
+		CheckTargetExist := FileExist(File)
+		if not CheckTargetExist {
 			; If Is Path to Folder
 			if (RegExMatch(File, "^(.*[\\/])[^.\\/.]*$"))
 			{
@@ -407,7 +529,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		}
 
 		;if Folder
-		if InStr(FileExist(File), "D") {
+		if InStr(CheckTargetExist, "D") {
 			; Add icon for folders
 			this.Icon_Folder_Add(menuitem, submenu, File)
 			return
@@ -429,8 +551,6 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			; Manualy Set Icons for Selected Extensions
 			case "url":
 				menuitem.SetIcon(submenu, A_Windir "\system32\Imageres.dll", -1010)
-			case "ahk":
-				menuitem.SetIcon(submenu, "autohotkey.exe", 2)
 			case "jpg", "png", "gif", "bmp":
 				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -236)
 			case "txt":
@@ -656,7 +776,7 @@ OpenFavorite(ItemName, LinkTargetPath, LinkPath, *)
 	; Yes. It is. ;)
 
 	; Open File/Folder/Link
-	if (ini.settings.enable_find_explorer = "true")
+	if (ini.settings.enable_find_explorer)
 	{
 		; Try to find an existing Windows Explorer window with the same path before opening a new one.
 		Run_explorer(path)
@@ -723,7 +843,7 @@ Run_explorer(path) {
 
 
 				; Try to find and Activate Tab
-				if (ini.settings.enable_find_explorer_tab = "true")
+				if (ini.settings.enable_find_explorer_tab)
 				{
 					; If Windows 11 and later
 					if VerCompare(A_OSVersion, "10.0.22000") >= 0
