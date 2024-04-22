@@ -1,6 +1,14 @@
 ﻿; This code creates a menu based on a directory, so it is easy to change and manage without changing any code.
+
+; Acknowledgments
 ; This code is an adaptation of QuickLinks.ahk, by Jack Dunning.
 ; http://www.computoredge.com/AutoHotkey/AutoHotkey_Quicklinks_Menu_App.html
+; and of subsequent adaptation - QuickLinksMenu_V2, by AHK_user (aka dmtr99)
+; https://github.com/dmtr99/QuickLinksMenu_V2
+; Subsequently, it has been extended by functions from Easy Access to Favorite Folders (based on the v1 script by Savage).
+; https://www.autohotkey.com/docs/v2/scripts/#FavoriteFolders
+
+; Changelog
 ; Updated 2021-11-24:
 ;- Added name of menu as variable
 ;- Changed functions to V2 compatible
@@ -10,7 +18,6 @@
 ; - Moved to a class
 
 ; Objev - Menu je navigovatelné klávesnicí
-; Cílem je vizuálně jednoduché a nápomocné menu. Věci navíc musejí být redukovatelné.
 
 #Requires AutoHotkey v2.0
 #SingleInstance Force
