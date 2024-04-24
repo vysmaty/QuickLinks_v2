@@ -103,6 +103,7 @@ lang_en := "
 )"
 
 ; Parse lang_en translation:
+
 Filename := A_ScriptDir "\lang_en.ini"
 if (!FileExist(Filename)) {
 	; If wanted, create lang_en.ini file and parse it.
@@ -145,6 +146,7 @@ g_window_id := 0
 g_class := ""
 g_title := ""
 g_process := ""
+
 
 ; Startup
 oMenu := QuickLinksMenu(QL_Menu := "Links")
@@ -261,10 +263,10 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			this.oMenu.%Folder0Menu%.Add(FolderName, this.oMenu.%Folder1Menu%) ; Create submenu
 
 			; Set Icon to Child Menu
-			if (ini.settings.enable_menu_folder_icon)
+			if (ini.settings.get_menu_folder_icons)
 			{
 				; set folder icon from Desktop.ini
-				this.Icon_Folder_Add(this.oMenu.%Folder0Menu%, FolderName, FolderPath)
+				this.Icon_Folder_Ini_Add(this.oMenu.%Folder0Menu%, FolderName, FolderPath)
 			}
 			else
 			{
@@ -295,7 +297,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			Linkname := StrReplace(A_LoopFileName, ".lnk")
 
 			this.Command_Set(this.oMenu.%Folder1Menu%, Linkname, A_LoopFilePath)
-			this.Icon_Add(this.oMenu.%Folder1Menu%, Linkname, A_LoopFilePath) ; icon
+			this.Icon_Add(this.oMenu.%Folder1Menu%, Linkname, A_LoopFilePath,ini.settings.check_link_target_exists,ini.settings.get_link_folder_icons,ini.settings.skip_network_checks) ; icon
 
 		}
 
@@ -439,7 +441,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 					this.Command_Set(this.oMenu.RecentFolders, OutFileName, LinkTargetPath)
 					if (ini.settings.enable_recent_folder_icons)
 					{
-						this.Icon_Add(this.oMenu.RecentFolders, OutFileName, LinkTargetPath) ; icon for extension
+						this.Icon_Add(this.oMenu.RecentFolders, OutFileName, LinkTargetPath,ini.settings.check_recent_folder_exists,0,1) ; icon for extension
 					}
 					else {
 						this.oMenu.RecentFolders.SetIcon(OutFileName, A_Windir "\System32\SHELL32.dll", 5) ; default icon for Folders
@@ -463,7 +465,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 					this.Command_Set(this.oMenu.RecentFiles, OutFileName, LinkTargetPath)
 					if (ini.settings.enable_recent_file_icons)
 					{
-						this.Icon_Add(this.oMenu.RecentFiles, OutFileName, LinkTargetPath) ; icon for extension
+						this.Icon_Add(this.oMenu.RecentFiles, OutFileName, LinkTargetPath,ini.settings.check_recent_file_exists,0,1) ; icon for extension
 					}
 					else {
 						this.oMenu.RecentFiles.SetIcon(OutFileName, A_Windir "\System32\SHELL32.dll", 0) ; default icon for Files
@@ -487,7 +489,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		return
 	}
 
-	Command_Set(menuitem, linkname, LoopFileFullPath) { ; set command based on extention or name
+	Command_Set(ThatMenu, MenuItemName, LoopFileFullPath) { ; set command based on extention or name
 		; Find direct links to folders for instant switching.
 		If InStr(LoopFileFullPath, ".lnk") {
 			FileGetShortcut(LoopFileFullPath, &LinkTargetPath)
@@ -495,90 +497,149 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 		Else {
 			LinkTargetPath := LoopFileFullPath
 		}
-		menuitem.Add(linkname, OpenFavorite.Bind(linkname, LinkTargetPath, LoopFileFullPath))
+		ThatMenu.Add(MenuItemName, OpenFavorite.Bind(MenuItemName, LinkTargetPath, LoopFileFullPath))
 	}
 
-	Icon_Add(menuitem, submenu, LoopFileFullPath) { ; add icon based on extention or name
+	; MARK: Icon_Add TODO: FIXME: Rewrite add conditions.
+
+	; Add icon based on extention, name, .Ink settings, desktop.ini file…
+	Icon_Add(ThatMenu, MenuItemName, ForFileFullPath, CheckTargetExist := 1, GetFolderIcon := 1, SkipNetworkPath := 1) {
+		; CheckTargetExist - boolean - will check Target File Existence (May be slow on network paths. Use ideally in combination with SkipNetworkPath)
+		; --> Icons for distinction of unavailable files/folders
+		; --> Reliable separation of files from folders
+		; GetFolderIcon    - boolean - will check for icons in desktop.ini's (May be slow on network paths. Use ideally in combination with SkipNetworkPath)
+		; SkipNetworkPath - boolean - will skips searching on network paths
+		; --> Speedup - don't ask for files/folders at network paths
+
 		IconFile := ""
 		IconIndex := ""
-
+		IsNetworkPath := 0
+		IsFolder := 0
 		/* IconNumber (IconIndex)
 		Type: Integer
 		If omitted, it defaults to 1 (the first icon group). Otherwise, specify the number of the icon group to be used in the file. For example, MyMenu.SetIcon(MenuItemName, "Shell32.dll", 2) would use the default icon from the second icon group. If negative, its absolute value is assumed to be the resource ID of an icon within an executable file.
 		*/
 
-		;if Defined in .Ink
-		If InStr(LoopFileFullPath, ".lnk") {
-			FileGetShortcut(LoopFileFullPath, &File, , , , &OutIcon, &OutIconNum)
+
+		; .lnk – Get Target Paths and Icon if defined in
+		If InStr(ForFileFullPath, ".lnk") {
+			FileGetShortcut(ForFileFullPath, &File, , , , &OutIcon, &OutIconNum)
 			if (OutIcon != "") {
-				menuitem.SetIcon(submenu, OutIcon, OutIconNum)
+				ThatMenu.SetIcon(MenuItemName, OutIcon, OutIconNum)
 				return
 			}
 		}
 		Else {
-			File := LoopFileFullPath
+			File := ForFileFullPath
 		}
 
-		;if Target Unavailable - Important for temporarily Unavalilable link targets.
-		CheckTargetExist := FileExist(File)
-		if not CheckTargetExist {
-			; If Is Path to Folder
-			if (RegExMatch(File, "^(.*[\\/])[^.\\/.]*$"))
+		; Check if network path
+		
+		; https://regex101.com/r/Og4ELs/2
+		if (SkipNetworkPath) { ; (Only if SkipNetworkPath := true --> else IsNetworkPath is always false)
+			if (RegExMatch(File, "^(\\)(\\[^\\\n:$?]+){1,}(\\?)$"))
 			{
-				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -146)
-				return
+				IsNetworkPath := 1
 			}
-			else
-			{
-				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -145)
-				return
+		}
+
+		; Check if folder path
+		; https://regex101.com/r/3tc9mq/1
+		; Simple RegExMatch(File, "^(.*[\\\/])[^.\\\/.\n]*$") ; Does not accept folders with a period in the name.
+		if (RegExMatch(File, "^(?<ParPath>.*[\\\/])(?:(?<DirNonDot>[^\.\\\/\n]*)|(?<DirNotExtAftDot>[^\\\/\n]*[\.][^.\\\/\n]{5,}))$"))
+		{
+			IsFolder := 1
+		}
+
+		; Optional: Checking if file exists
+		if (CheckTargetExist AND !(IsNetworkPath)) {
+			;if Target Unavailable - Important for temporarily Unavalilable link targets.
+			TargetExist := FileExist(File)
+			if not TargetExist {
+				; Non available folder
+				if (IsFolder)
+				{
+					ThatMenu.SetIcon(MenuItemName, A_Windir "\system32\shell32.dll", -146)
+					return
+				}
+				; Non available file
+				else
+				{
+					ThatMenu.SetIcon(MenuItemName, A_Windir "\system32\shell32.dll", -145)
+					return
+				}
+			}
+			else {
+				; Reliable distinction between files and folders is possible
+				if InStr(TargetExist, "D") {
+					IsFolder := 1
+				}
+				else {
+					IsFolder := 0
+				}
 			}
 		}
 
 		;if Folder
-		if InStr(CheckTargetExist, "D") {
-			; Add icon for folders
-			this.Icon_Folder_Add(menuitem, submenu, File)
-			return
+		if (IsFolder) {
+			if (GetFolderIcon AND !(IsNetworkPath))
+			{
+				this.Icon_Folder_Ini_Add(ThatMenu, MenuItemName, File)
+				return
+			}
+			else {
+				ThatMenu.SetIcon(MenuItemName, A_Windir "\system32\shell32.dll", -5)
+				return
+			}
 		}
 
-		;else -> By Extension
+		; = -> By Extension
+
 		SplitPath File, , , &Extension
 
 		; Extension Exe
 		If (Extension = "exe") {
-			try {
-				menuitem.SetIcon(submenu, file, "1")
+			if !(IsNetworkPath)
+			{
+				try {
+					ThatMenu.SetIcon(MenuItemName, file, "1")
+					return
+				}
+				return
 			}
-			return
 		}
 
 		; Other Extensions
 		switch (Extension) {
 			; Manualy Set Icons for Selected Extensions
 			case "url":
-				menuitem.SetIcon(submenu, A_Windir "\system32\Imageres.dll", -1010)
+				ThatMenu.SetIcon(MenuItemName, A_Windir "\system32\Imageres.dll", -1010)
+				return
 			case "jpg", "png", "gif", "bmp":
-				menuitem.SetIcon(submenu, A_Windir "\system32\shell32.dll", -236)
+				ThatMenu.SetIcon(MenuItemName, A_Windir "\system32\shell32.dll", -236)
+				return
 			case "txt":
-				menuitem.SetIcon(submenu, A_Windir "\System32\shell32.dll", -235)
+				ThatMenu.SetIcon(MenuItemName, A_Windir "\System32\shell32.dll", -235)
+				return
 			default:
 				this.GetExtIcon(Extension, &IconFile, &IconIndex)
-				menuitem.SetIcon(submenu, IconFile, IconIndex)
+				ThatMenu.SetIcon(MenuItemName, IconFile, IconIndex)
 				return
 		}
 	}
 
-	Icon_Folder_Add(menuitem, submenu, FolderPath) { ; add icon for folders
+	Icon_Folder_Ini_Add(ThatMenu, MenuItemName, FolderPath) { ; add icon for folders
 		IniFile := FolderPath "\desktop.ini"
 		if FileExist(IniFile) {
 			ReadDesktopIni(IniFile, &IconFile, &IconIndex)
 			AbsoluteIconPath := ConvertToAbsolutePath(IconFile, FolderPath)
 			OutputDebug 'IconToSet:' AbsoluteIconPath ',' IconIndex '`n'
-			menuitem.SetIcon(submenu, AbsoluteIconPath, IconIndex)
+			ThatMenu.SetIcon(MenuItemName, AbsoluteIconPath, IconIndex)
+			return
 		}
 		else {
-			menuitem.SetIcon(submenu, A_Windir "\System32\SHELL32.dll", "5")
+			ThatMenu.SetIcon(MenuItemName, A_Windir "\System32\SHELL32.dll", "5")
+			return
 		}
 	}
 
@@ -633,7 +694,7 @@ Class QuickLinksMenu { ; Just run it one time at the start.
 			; Set Fallback Icon TODO: A taky Catch když Defauilt Icon selže.
 			IconFile := A_Windir "\System32\SHELL32.dll"
 			IconIndex := -16769
-			OutputDebug "Error. The path for the '" Ext "' icon was not retrieved from the registry. It will by used default.`n"
+			OutputDebug "Error. The path for the '" Ext "' icon was not retrieved from the registry. It will be used default.`n"
 			return
 		}
 	}
